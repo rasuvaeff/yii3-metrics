@@ -18,7 +18,7 @@ final readonly class LabelSet
 {
     private const string NAME_PATTERN = '/^[a-zA-Z_]\w*$/';
 
-    /** @var array<string, string> */
+    /** @var array<non-empty-string, string> */
     public array $labels;
 
     /**
@@ -29,7 +29,7 @@ final readonly class LabelSet
         $validated = [];
 
         foreach ($labels as $name => $value) {
-            if (!\is_string($name) || preg_match(self::NAME_PATTERN, $name) !== 1) {
+            if (!\is_string($name) || $name === '' || preg_match(self::NAME_PATTERN, $name) !== 1) {
                 throw new InvalidArgumentException(\sprintf('Invalid label name "%s"', (string) $name));
             }
 
