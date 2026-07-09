@@ -37,7 +37,7 @@ final readonly class CurrentRouteResolver implements RouteResolverInterface
             return $pattern;
         }
 
-        if ($this->fallback !== null) {
+        if ($this->fallback instanceof RouteResolverInterface) {
             return $this->fallback->resolve($request);
         }
 
