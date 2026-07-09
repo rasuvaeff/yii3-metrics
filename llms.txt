@@ -1,0 +1,86 @@
+# rasuvaeff/yii3-metrics
+
+Vendor-neutral metrics core for Yii3: `MetricRegistry` facade over counters,
+gauges, histograms + PSR-15 RED middleware. Namespace `Rasuvaeff\Yii3Metrics`.
+Instruments are interfaces; state lives in a backend. Core ships `Null*` (no-op)
+and `InMemory*` (dev/test) only.
+
+## Install
+
+```bash
+composer require rasuvaeff/yii3-metrics
+```
+
+Backend (real export): `rasuvaeff/yii3-metrics-prometheus` or `-otel`. Without one,
+bind `MeterProviderInterface => NullMeterProvider`.
+
+## Rules
+
+- Metric names are Prometheus-strict `^[a-zA-Z_:][a-zA-Z0-9_:]*$` (underscores, NO
+  dots). Label names `^[a-zA-Z_]\w*$` (validated by `LabelSet`).
+- A meter MEMOIZES instruments by name — `counter('x')` twice → same accumulating
+  instrument. A counter rejects `inc()` with a negative amount (use a gauge).
+- Structural validation (name regex, bucket monotonicity) runs even in `NullMeter`;
+  the negative-inc guard runs only in recording impls.
+- `config/di.php` binds ONLY the facade (`MetricRegistry`) + `RouteResolverInterface`.
+  NEVER bind `MeterProviderInterface` in core (one backend/app owns it, else
+  `yiisoft/config` Duplicate key).
+- Histograms are cumulative (`le`); `+Inf` appended implicitly.
+- RED `route` label defaults to path (cardinality footgun) — inject a
+  `RouteResolverInterface`. Duration via `hrtime` (no telemetry dependency).
+
+## API
+
+### Registry / instruments
+
+```php
+use Rasuvaeff\Yii3Metrics\{MetricRegistry, LabelSet};
+
+$c = $registry->counter('orders_total', 'help', ['channel']);
+$c->inc(1.0, new LabelSet(['channel' => 'web']));
+
+$g = $registry->gauge('inflight_jobs');
+$g->set(3.0); $g->inc(); $g->dec();
+
+$h = $registry->histogram('db_seconds', 'help', ['op'], [0.01, 0.1, 1.0]); // finite bounds; +Inf auto
+$h->observe(0.023, new LabelSet(['op' => 'select']));
+```
+
+Signatures: `counter(name, help='', labelNames=[]): CounterInterface`;
+`gauge(...): GaugeInterface`; `histogram(name, help='', labelNames=[], buckets=[]): HistogramInterface`.
+`CounterInterface::inc(float $amount=1.0, LabelSet $labels=new LabelSet())`.
+`GaugeInterface::set|inc|dec(float, LabelSet)`. `HistogramInterface::observe(float, LabelSet)`.
+
+### Providers
+
+```php
+use Rasuvaeff\Yii3Metrics\{NullMeterProvider, InMemoryMeterProvider, MetricRegistry};
+
+new MetricRegistry(new NullMeterProvider());     // no-op
+$p = new InMemoryMeterProvider();                // dev/test
+$p->snapshots();                                 // list<MetricSnapshot> (no timestamp)
+```
+
+### RED middleware (PSR-15)
+
+```php
+use Rasuvaeff\Yii3Metrics\{RedMetricsMiddleware, RouteResolverInterface};
+
+new RedMetricsMiddleware($registry);                 // default PathRouteResolver
+new RedMetricsMiddleware($registry, $routeResolver); // custom route label
+// records http_server_requests_total{method,route,status}
+//         http_server_request_duration_seconds{method,route,status}
+// status = '500' when the handler throws.
+```
+
+### LabelSet
+
+```php
+use Rasuvaeff\Yii3Metrics\LabelSet;
+
+$l = new LabelSet(['method' => 'GET', 'code' => 200]); // scalar values coerced to string
+$l->labels;   // ['code' => '200', 'method' => 'GET'] (sorted)
+$l->equals($other); $l->key(); $l->names(); $l->isEmpty();
+```
+
+Invalid label names throw `Exception\InvalidArgumentException`.

@@ -1,0 +1,79 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Rasuvaeff\Yii3Metrics;
+
+use Rasuvaeff\Yii3Metrics\Exception\InvalidArgumentException;
+
+/**
+ * Immutable set of metric label name/value pairs. Names are validated against the
+ * Prometheus label-name grammar; values are arbitrary strings. Names are stored
+ * in canonical (sorted) order so two sets with the same pairs are equal
+ * regardless of insertion order.
+ *
+ * @api
+ */
+final readonly class LabelSet
+{
+    private const string NAME_PATTERN = '/^[a-zA-Z_]\w*$/';
+
+    /** @var array<string, string> */
+    public array $labels;
+
+    /**
+     * @param array<array-key, scalar> $labels
+     */
+    public function __construct(array $labels = [])
+    {
+        $validated = [];
+
+        foreach ($labels as $name => $value) {
+            if (!\is_string($name) || preg_match(self::NAME_PATTERN, $name) !== 1) {
+                throw new InvalidArgumentException(\sprintf('Invalid label name "%s"', (string) $name));
+            }
+
+            $validated[$name] = match (true) {
+                \is_bool($value) => $value ? 'true' : 'false',
+                \is_string($value) => $value,
+                default => (string) $value,
+            };
+        }
+
+        ksort($validated);
+
+        $this->labels = $validated;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function names(): array
+    {
+        return array_keys($this->labels);
+    }
+
+    public function isEmpty(): bool
+    {
+        return $this->labels === [];
+    }
+
+    public function equals(self $other): bool
+    {
+        return $this->labels === $other->labels;
+    }
+
+    /**
+     * Canonical string key for storing values per label set.
+     */
+    public function key(): string
+    {
+        $parts = [];
+
+        foreach ($this->labels as $name => $value) {
+            $parts[] = $name . '=' . $value;
+        }
+
+        return implode(',', $parts);
+    }
+}

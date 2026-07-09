@@ -1,0 +1,190 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Rasuvaeff\Yii3Metrics\Tests;
+
+use Rasuvaeff\PropertyTesting\ArbitraryInterface;
+use Rasuvaeff\PropertyTesting\Gen;
+use Rasuvaeff\PropertyTesting\Property;
+use Rasuvaeff\Yii3Metrics\Exception\InvalidArgumentException;
+use Rasuvaeff\Yii3Metrics\InMemoryCounter;
+use Rasuvaeff\Yii3Metrics\InMemoryGauge;
+use Rasuvaeff\Yii3Metrics\InMemoryHistogram;
+use Rasuvaeff\Yii3Metrics\InMemoryMeter;
+use Rasuvaeff\Yii3Metrics\InMemoryMeterProvider;
+use Rasuvaeff\Yii3Metrics\LabelSet;
+use Rasuvaeff\Yii3Metrics\MetricSample;
+use Rasuvaeff\Yii3Metrics\MetricSnapshot;
+use Testo\Assert;
+use Testo\Codecov\Covers;
+use Testo\Test;
+
+#[Test]
+#[Covers(InMemoryMeter::class)]
+#[Covers(InMemoryCounter::class)]
+#[Covers(InMemoryGauge::class)]
+#[Covers(InMemoryHistogram::class)]
+#[Covers(InMemoryMeterProvider::class)]
+#[Covers(MetricSnapshot::class)]
+#[Covers(MetricSample::class)]
+final class InMemoryMeterTest
+{
+    public function memoizesInstrumentsByName(): void
+    {
+        $meter = new InMemoryMeter();
+
+        $a = $meter->counter('http_requests_total');
+        $b = $meter->counter('http_requests_total');
+
+        Assert::same($a, $b);
+
+        $a->inc();
+        $b->inc();
+
+        Assert::same($meter->snapshots()[0]->samples[0]->value, 2.0);
+    }
+
+    public function counterRejectsNegativeIncrement(): void
+    {
+        $counter = (new InMemoryMeter())->counter('c');
+
+        try {
+            $counter->inc(-1.0);
+            Assert::fail('expected an InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('cannot be decremented');
+        }
+    }
+
+    public function gaugeSupportsSetIncDec(): void
+    {
+        $gauge = (new InMemoryMeter())->gauge('g');
+
+        $gauge->set(10.0);
+        $gauge->inc(5.0);
+        $gauge->dec(3.0);
+
+        Assert::same($this->onlySample($gauge)->value, 12.0);
+    }
+
+    public function histogramAggregatesCountAndSum(): void
+    {
+        $histogram = (new InMemoryMeter())->histogram('h', buckets: [0.1, 1.0]);
+
+        $histogram->observe(0.05);
+        $histogram->observe(0.5);
+        $histogram->observe(2.0);
+
+        $sample = $this->onlySample($histogram);
+        Assert::same($sample->value, 3.0); // count
+        Assert::same($sample->sum, 2.55);
+        Assert::same($sample->buckets['0.1'], 1.0); // 0.05
+        Assert::same($sample->buckets['1'], 2.0);   // 0.05, 0.5
+        Assert::same($sample->buckets['+Inf'], 3.0);
+    }
+
+    public function histogramCountsValuesEqualToTheBucketBound(): void
+    {
+        $histogram = (new InMemoryMeter())->histogram('h', buckets: [0.1]);
+
+        $histogram->observe(0.1); // 0.1 <= 0.1 is inclusive
+
+        Assert::same($this->onlySample($histogram)->buckets['0.1'], 1.0);
+    }
+
+    public function providerReturnsTheSameMeter(): void
+    {
+        $provider = new InMemoryMeterProvider();
+
+        Assert::same($provider->getMeter(), $provider->getMeter());
+    }
+
+    public function snapshotIsStableAcrossCalls(): void
+    {
+        $meter = new InMemoryMeter();
+        $meter->counter('c')->inc(3.0, new LabelSet(['a' => '1']));
+        $meter->histogram('h')->observe(0.2);
+
+        $first = $meter->snapshots();
+        $second = $meter->snapshots();
+
+        Assert::count($first, 2);
+
+        foreach ($first as $index => $snapshot) {
+            Assert::true($snapshot->equals($second[$index]));
+        }
+    }
+
+    public function providerExposesSnapshotsFromEveryInstrument(): void
+    {
+        $provider = new InMemoryMeterProvider();
+        $meter = $provider->getMeter();
+
+        $meter->counter('c')->inc();
+        $meter->gauge('g')->set(1.0);
+        $meter->histogram('h')->observe(0.1);
+
+        Assert::count($provider->snapshots(), 3);
+    }
+
+    public function freshProviderHasNoSnapshots(): void
+    {
+        Assert::same((new InMemoryMeterProvider())->snapshots(), []);
+    }
+
+    #[Property(runs: 200)]
+    public function counterAccumulatesToTheSumOfIncrements(array $amounts): void
+    {
+        $meter = new InMemoryMeter();
+        $counter = $meter->counter('c');
+
+        foreach ($amounts as $amount) {
+            $counter->inc($amount);
+        }
+
+        Assert::same($meter->snapshots()[0]->samples[0]->value, array_sum($amounts));
+    }
+
+    /** @return array<string, ArbitraryInterface> */
+    private function counterAccumulatesToTheSumOfIncrementsGenerators(): array
+    {
+        return [
+            'amounts' => Gen::nonEmptyArrayOf(Gen::floatBetween(0.0, 1000.0)),
+        ];
+    }
+
+    #[Property(runs: 200)]
+    public function histogramBucketsAreCumulative(float $value): void
+    {
+        $meter = new InMemoryMeter();
+        $histogram = $meter->histogram('h', buckets: [0.1, 0.5, 1.0, 5.0]);
+
+        $histogram->observe($value);
+
+        $sample = $meter->snapshots()[0]->samples[0];
+        Assert::same($sample->value, 1.0);
+        Assert::same($sample->sum, $value);
+
+        foreach ([0.1, 0.5, 1.0, 5.0, INF] as $bound) {
+            $key = is_infinite($bound) ? '+Inf' : (string) $bound;
+            Assert::same($sample->buckets[$key], $value <= $bound ? 1.0 : 0.0);
+        }
+    }
+
+    /** @return array<string, ArbitraryInterface> */
+    private function histogramBucketsAreCumulativeGenerators(): array
+    {
+        return [
+            'value' => Gen::floatBetween(-1.0, 10.0),
+        ];
+    }
+
+    private function onlySample(InMemoryGauge|InMemoryHistogram $instrument): MetricSample
+    {
+        $samples = $instrument->snapshot()->samples;
+        Assert::count($samples, 1);
+
+        return $samples[0];
+    }
+}
