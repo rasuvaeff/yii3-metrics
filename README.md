@@ -91,6 +91,19 @@ $registry->counter('c')->inc();
 $snapshots = $provider->snapshots(); // list<MetricSnapshot>, no timestamp
 ```
 
+### API surface
+
+| Type | Role |
+|---|---|
+| `MetricRegistry` | facade: `counter/gauge/histogram(name, help, labelNames, buckets)` |
+| `MeterProviderInterface` / `MeterInterface` | swappable backend entry point; a meter creates and memoizes instruments |
+| `CounterInterface` / `GaugeInterface` / `HistogramInterface` | instrument contracts |
+| `LabelSet` / `MetricKind` | validated label pairs / instrument kind enum (`Counter`, `Gauge`, `Histogram`) |
+| `MetricSnapshot` / `MetricSample` | collected state: a metric (name, kind, help) and its per-label-set samples |
+| `NullMeterProvider`, `NullMeter`, `NullCounter`, `NullGauge`, `NullHistogram` | no-op backend (config-only default; still validates structure) |
+| `InMemoryMeterProvider`, `InMemoryMeter`, `InMemoryCounter`, `InMemoryGauge`, `InMemoryHistogram` | single-process dev/test backend with `snapshots()` |
+| `RedMetricsMiddleware`, `RouteResolverInterface`, `PathRouteResolver` | PSR-15 RED instrumentation |
+
 ## Wiring (`yiisoft/config`)
 
 The core `config/di.php` binds the facade (`MetricRegistry`) and the default
