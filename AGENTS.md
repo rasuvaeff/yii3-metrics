@@ -15,7 +15,8 @@ Public API: `MetricRegistry` (facade), `MeterProviderInterface`, `MeterInterface
 `CounterInterface`, `GaugeInterface`, `HistogramInterface`, `LabelSet`,
 `MetricKind`, `MetricSnapshot`, `MetricSample`, `Null*` and `InMemory*`
 (meter/provider/counter/gauge/histogram), `RedMetricsMiddleware`,
-`RouteResolverInterface`, `PathRouteResolver`, `Exception\InvalidArgumentException`.
+`RouteResolverInterface`, `PathRouteResolver`, `CurrentRouteResolver`,
+`Exception\InvalidArgumentException`.
 
 ## DI wiring (core+backend)
 
@@ -65,9 +66,18 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
   `http_server_requests_total` / `http_server_request_duration_seconds`, NOT the
   dotted names in the plan (which contradict the name regex).
 - **RED `route` label is a cardinality footgun.** The default `PathRouteResolver`
-  uses the raw path (a series per `/users/123`). The sanitizer/router-template
-  resolver belongs in the Prometheus backend; inject a `RouteResolverInterface`
-  in production.
+  uses the raw path (a series per `/users/123`). In production the app rebinds
+  `RouteResolverInterface => CurrentRouteResolver` (matched `yiisoft/router`
+  pattern) or the Prometheus backend's `SanitizingRouteResolver`.
+- **`CurrentRouteResolver` is an optional-dep class** (`yiisoft/router` in
+  `suggest` + `require-dev`, symbol whitelisted in `composer-require-checker.json`
+  — do not delete that file). It must NOT be bound in the core `di.php` — the
+  container would fatal without `yiisoft/router` installed. `RedMetricsMiddleware`
+  sits BEFORE the router middleware: the label resolves in `finally` after the
+  handler ran, when `CurrentRoute` is populated. Unmatched requests collapse to
+  `(unmatched)` by default (scanner traffic must not mint series); an injected
+  fallback resolver overrides that. `yiisoft/dummy-provider` satisfies the
+  `yiisoft/router-implementation` virtual package in `require-dev`.
 - Histograms are cumulative (`le`): an observation increments every bucket whose
   bound >= the value. `+Inf` is appended implicitly; callers pass finite bounds.
 - `MetricSnapshot` carries NO timestamp (so two snapshots of unchanged state are

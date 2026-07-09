@@ -22,3 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the backend or app owns `MeterProviderInterface`.
 - Property tests (counter monotonicity, histogram bucket containment, label-name
   validation, snapshot identity) and a `ConfigWiringTest`.
+- `CurrentRouteResolver` — RED `route` label from the matched `yiisoft/router`
+  pattern (`/users/{id}`); unmatched requests collapse to `(unmatched)` or an
+  injected fallback resolver. `yiisoft/router` is optional (`suggest`).

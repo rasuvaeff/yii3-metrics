@@ -39,11 +39,14 @@
         "roave/backward-compatibility-check": "^8.0",
         "testo/bridge-infection": "^0.1.6",
         "testo/testo": "^0.10.25",
-        "vimeo/psalm": "^6.16"
+        "vimeo/psalm": "^6.16",
+        "yiisoft/dummy-provider": "^1.1",
+        "yiisoft/router": "^4.0.2"
     },
     "suggest": {
         "rasuvaeff/yii3-metrics-otel": "OTLP metrics backend (binds MeterProviderInterface)",
-        "rasuvaeff/yii3-metrics-prometheus": "Prometheus exposition backend (binds MeterProviderInterface)"
+        "rasuvaeff/yii3-metrics-prometheus": "Prometheus exposition backend (binds MeterProviderInterface)",
+        "yiisoft/router": "Router-aware low-cardinality route label via CurrentRouteResolver"
     },
     "autoload": {
         "psr-4": {

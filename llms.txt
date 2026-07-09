@@ -73,6 +73,20 @@ new RedMetricsMiddleware($registry, $routeResolver); // custom route label
 // status = '500' when the handler throws.
 ```
 
+### CurrentRouteResolver (yiisoft/router, optional dep)
+
+```php
+use Rasuvaeff\Yii3Metrics\CurrentRouteResolver;
+
+// route label = matched route pattern '/users/{id}' (low-cardinality).
+// Unmatched (404) => '(unmatched)', or the fallback resolver if given.
+new CurrentRouteResolver($currentRoute);                                  // Yiisoft\Router\CurrentRoute
+new CurrentRouteResolver($currentRoute, fallback: new PathRouteResolver());
+// Rebind app-side: RouteResolverInterface::class => CurrentRouteResolver::class.
+// RedMetricsMiddleware must sit BEFORE the router middleware (label resolved
+// after the handler ran, when CurrentRoute is populated).
+```
+
 ### LabelSet
 
 ```php

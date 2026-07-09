@@ -75,8 +75,26 @@ $middleware = new RedMetricsMiddleware($registry); // add to your PSR-15 stack
 ```
 
 > **Cardinality:** the `route` label defaults to the raw path — a new time series
-> per `/users/123`. Inject a router-aware `RouteResolverInterface` (mapping to a
-> template like `/users/{id}`) in production.
+> per `/users/123`. In production inject the router-aware resolver (below) or a
+> sanitizing one from the Prometheus backend.
+
+With `yiisoft/router` installed, `CurrentRouteResolver` resolves the label to the
+**matched route pattern** (`/users/{id}`) — low-cardinality by construction.
+Unmatched requests (404, scanners) collapse to `(unmatched)` unless you pass a
+fallback resolver:
+
+```php
+// config/common/di.php — app-side rebind (the core binds PathRouteResolver)
+use Rasuvaeff\Yii3Metrics\CurrentRouteResolver;
+use Rasuvaeff\Yii3Metrics\RouteResolverInterface;
+
+return [
+    RouteResolverInterface::class => CurrentRouteResolver::class,
+];
+```
+
+Place `RedMetricsMiddleware` **before** the router middleware — the label is
+resolved after the handler ran, when `CurrentRoute` is populated.
 
 ### Inspecting metrics in tests
 
@@ -103,6 +121,7 @@ $snapshots = $provider->snapshots(); // list<MetricSnapshot>, no timestamp
 | `NullMeterProvider`, `NullMeter`, `NullCounter`, `NullGauge`, `NullHistogram` | no-op backend (config-only default; still validates structure) |
 | `InMemoryMeterProvider`, `InMemoryMeter`, `InMemoryCounter`, `InMemoryGauge`, `InMemoryHistogram` | single-process dev/test backend with `snapshots()` |
 | `RedMetricsMiddleware`, `RouteResolverInterface`, `PathRouteResolver` | PSR-15 RED instrumentation |
+| `CurrentRouteResolver` | route label from the matched `yiisoft/router` pattern (optional dep) |
 
 ## Wiring (`yiisoft/config`)
 
