@@ -6,7 +6,10 @@ Guidance for AI agents working on this package. Read before changing code.
 
 The vendor-neutral **metrics core** for Yii3: a `MetricRegistry` facade over
 counters, gauges, and histograms, plus a PSR-15 RED middleware. Instruments are
-interfaces — state lives in a backend (`yii3-metrics-prometheus` / `-otel`); the
+interfaces — state lives in a backend (`yii3-metrics-prometheus`; the OTLP
+backend `yii3-metrics-otel` exists in the monorepo but is deliberately
+UNPUBLISHED — publish only on a real long-running-runtime / OTLP-pipeline
+request); the
 core ships only `Null*` (no-op) and `InMemory*` (single-process dev/test) impls.
 
 Namespace: `Rasuvaeff\Yii3Metrics`.

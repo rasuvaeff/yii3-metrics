@@ -10,7 +10,7 @@
 
 Vendor-neutral metrics for Yii3: a `MetricRegistry` facade over counters, gauges,
 and histograms, plus a PSR-15 RED middleware. The exporter is a swappable backend
-(Prometheus or OTLP).
+(Prometheus today; the swappable provider key leaves room for others).
 
 > Using an AI coding assistant? [llms.txt](llms.txt) has a compact API reference
 > you can pass as context.
@@ -26,8 +26,8 @@ and histograms, plus a PSR-15 RED middleware. The exporter is a swappable backen
 composer require rasuvaeff/yii3-metrics
 ```
 
-For real export, add a backend (later sprints): `rasuvaeff/yii3-metrics-prometheus`
-or `rasuvaeff/yii3-metrics-otel`. Without one, bind
+For real export, add the backend: `rasuvaeff/yii3-metrics-prometheus`.
+Without one, bind
 `MeterProviderInterface => NullMeterProvider` (see [Wiring](#wiring-yiisoftconfig)).
 
 ## Usage

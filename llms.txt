@@ -11,7 +11,7 @@ and `InMemory*` (dev/test) only.
 composer require rasuvaeff/yii3-metrics
 ```
 
-Backend (real export): `rasuvaeff/yii3-metrics-prometheus` or `-otel`. Without one,
+Backend (real export): `rasuvaeff/yii3-metrics-prometheus`. Without one,
 bind `MeterProviderInterface => NullMeterProvider`.
 
 ## Rules

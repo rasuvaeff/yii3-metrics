@@ -44,7 +44,6 @@
         "yiisoft/router": "^4.0.2"
     },
     "suggest": {
-        "rasuvaeff/yii3-metrics-otel": "OTLP metrics backend (binds MeterProviderInterface)",
         "rasuvaeff/yii3-metrics-prometheus": "Prometheus exposition backend (binds MeterProviderInterface)",
         "yiisoft/router": "Router-aware low-cardinality route label via CurrentRouteResolver"
     },
