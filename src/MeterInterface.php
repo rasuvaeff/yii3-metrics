@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace Rasuvaeff\Yii3Metrics;
 
 /**
- * Creates instruments. Implementations MUST return the SAME instrument instance
- * for a repeated `(kind, name)` — metrics accumulate across the process, so a new
- * instance per call would lose state (and clash in the Prometheus backend).
+ * Creates instruments. A repeated `(kind, name)` MUST yield an instrument
+ * recording into the SAME underlying accumulating state — metrics accumulate
+ * across the process, so per-call state would be lost. Instance identity is not
+ * guaranteed: a backend may return a fresh stateless wrapper when its SDK
+ * already aggregates by name; an instrument that itself holds state MUST be
+ * memoized.
  *
  * @api
  */

@@ -18,6 +18,11 @@ use Psr\Http\Server\RequestHandlerInterface;
  * The `route` label defaults to the request path — wire a router-aware
  * {@see RouteResolverInterface} to avoid a series per URL id (cardinality).
  *
+ * `$durationBuckets` overrides the histogram's upper bounds (seconds, finite,
+ * strictly increasing; `+Inf` is appended) — tune it when your latency profile
+ * doesn't fit the Prometheus defaults (0.005 s … 10 s), e.g. endpoints slower
+ * than 10 s. An empty list keeps the defaults.
+ *
  * @api
  */
 final readonly class RedMetricsMiddleware implements MiddlewareInterface
@@ -30,12 +35,21 @@ final readonly class RedMetricsMiddleware implements MiddlewareInterface
     private CounterInterface $requests;
     private HistogramInterface $duration;
 
+    /**
+     * @param list<float> $durationBuckets
+     */
     public function __construct(
         MetricRegistry $registry,
         private RouteResolverInterface $routes = new PathRouteResolver(),
+        array $durationBuckets = [],
     ) {
         $this->requests = $registry->counter(self::REQUESTS, 'Total HTTP requests handled', self::LABELS);
-        $this->duration = $registry->histogram(self::DURATION, 'HTTP request duration in seconds', self::LABELS);
+        $this->duration = $registry->histogram(
+            self::DURATION,
+            'HTTP request duration in seconds',
+            self::LABELS,
+            $durationBuckets,
+        );
     }
 
     #[\Override]

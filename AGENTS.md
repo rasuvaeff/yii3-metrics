@@ -32,9 +32,12 @@ the app (`MeterProviderInterface => NullMeterProvider`). Binding it twice is a
 1. **Verification is mandatory.** Never claim "done" without a fresh green
    `composer build`. "Should work" does not count.
 2. **No suppressions.** No `@psalm-suppress`, no baseline. Fix the root cause.
-3. **A meter MUST memoize instruments by name, and validation is split by axis.**
-   - Same `(kind, name)` → the SAME instrument instance (metrics accumulate; RED
-     increments one counter per request). A fresh instance would lose state.
+3. **A meter MUST keep per-name accumulating state, and validation is split by axis.**
+   - Same `(kind, name)` → an instrument recording into the SAME underlying
+     state (metrics accumulate; RED increments one counter per request).
+     Instance identity is NOT part of the contract: a backend whose SDK already
+     aggregates by name may hand out fresh stateless wrappers, but any
+     instrument that itself holds state must be memoized.
    - **Structural validation always** (even in `NullMeter`): metric-name regex
      (`^[a-zA-Z_:][a-zA-Z0-9_:]*$`, Prometheus — no dots) and histogram bucket
      monotonicity; `LabelSet` validates label-name format in its constructor.

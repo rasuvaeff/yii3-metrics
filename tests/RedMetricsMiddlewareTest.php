@@ -101,6 +101,20 @@ final class RedMetricsMiddlewareTest
         Assert::same($this->snapshot('http_server_requests_total')->samples[0]->labels->labels['route'], '/users/{id}');
     }
 
+    public function customDurationBucketsReachTheHistogram(): void
+    {
+        $middleware = new RedMetricsMiddleware(
+            $this->registry,
+            durationBuckets: [1.0, 30.0, 120.0],
+        );
+
+        $middleware->process($this->factory->createServerRequest('GET', 'https://x/slow'), $this->handler(200));
+
+        $duration = $this->snapshot('http_server_request_duration_seconds');
+        // PHP casts numeric string array keys to int.
+        Assert::same(array_keys($duration->samples[0]->buckets), [1, 30, 120, '+Inf']);
+    }
+
     private function snapshot(string $name): MetricSnapshot
     {
         foreach ($this->provider->snapshots() as $snapshot) {

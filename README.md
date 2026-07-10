@@ -72,6 +72,10 @@ throws).
 use Rasuvaeff\Yii3Metrics\RedMetricsMiddleware;
 
 $middleware = new RedMetricsMiddleware($registry); // add to your PSR-15 stack
+
+// Latency profile doesn't fit the Prometheus defaults (0.005s…10s)?
+// Override the histogram bounds (seconds, strictly increasing; +Inf appended):
+$middleware = new RedMetricsMiddleware($registry, durationBuckets: [0.1, 1.0, 10.0, 60.0]);
 ```
 
 > **Cardinality:** the `route` label defaults to the raw path — a new time series
