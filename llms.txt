@@ -78,6 +78,8 @@ use Rasuvaeff\Yii3Metrics\{RedMetricsMiddleware, RouteResolverInterface};
 new RedMetricsMiddleware($registry);                 // default PathRouteResolver
 new RedMetricsMiddleware($registry, $routeResolver); // custom route label
 new RedMetricsMiddleware($registry, durationBuckets: [0.1, 1.0, 10.0]); // custom histogram bounds (s)
+new RedMetricsMiddleware($registry, excludedPaths: ['/metrics']); // skip scrape/probe endpoints (exact paths)
+// yiisoft/config: params 'rasuvaeff/yii3-metrics' => ['red' => ['duration_buckets' => [...], 'excluded_paths' => [...]]]
 // records http_server_requests_total{method,route,status}
 //         http_server_request_duration_seconds{method,route,status}
 // status = '500' when the handler throws.

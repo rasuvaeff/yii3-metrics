@@ -115,6 +115,20 @@ final class RedMetricsMiddlewareTest
         Assert::same(array_keys($duration->samples[0]->buckets), [1, 30, 120, '+Inf']);
     }
 
+    public function excludedPathIsNotRecorded(): void
+    {
+        $middleware = new RedMetricsMiddleware($this->registry, excludedPaths: ['/metrics']);
+
+        $response = $middleware->process($this->factory->createServerRequest('GET', 'https://x/metrics'), $this->handler(200));
+
+        Assert::same($response->getStatusCode(), 200);
+
+        // Instruments are registered in the constructor, but nothing was recorded.
+        foreach ($this->provider->snapshots() as $snapshot) {
+            Assert::count($snapshot->samples, 0);
+        }
+    }
+
     private function snapshot(string $name): MetricSnapshot
     {
         foreach ($this->provider->snapshots() as $snapshot) {

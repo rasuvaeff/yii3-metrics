@@ -23,6 +23,10 @@ use Psr\Http\Server\RequestHandlerInterface;
  * doesn't fit the Prometheus defaults (0.005 s … 10 s), e.g. endpoints slower
  * than 10 s. An empty list keeps the defaults.
  *
+ * `$excludedPaths` skips recording for exact request paths — typically the
+ * scrape/probe endpoints (`/metrics`, `/health`) whose self-traffic would only
+ * add noise. Excluded requests pass straight through.
+ *
  * @api
  */
 final readonly class RedMetricsMiddleware implements MiddlewareInterface
@@ -37,11 +41,13 @@ final readonly class RedMetricsMiddleware implements MiddlewareInterface
 
     /**
      * @param list<float> $durationBuckets
+     * @param list<string> $excludedPaths exact request paths to skip (e.g. '/metrics')
      */
     public function __construct(
         MetricRegistry $registry,
         private RouteResolverInterface $routes = new PathRouteResolver(),
         array $durationBuckets = [],
+        private array $excludedPaths = [],
     ) {
         $this->requests = $registry->counter(self::REQUESTS, 'Total HTTP requests handled', self::LABELS);
         $this->duration = $registry->histogram(
@@ -55,6 +61,10 @@ final readonly class RedMetricsMiddleware implements MiddlewareInterface
     #[\Override]
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
+        if (\in_array($request->getUri()->getPath(), $this->excludedPaths, true)) {
+            return $handler->handle($request);
+        }
+
         $start = hrtime(true);
         $status = self::STATUS_ON_THROW;
 

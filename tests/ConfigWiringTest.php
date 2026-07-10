@@ -33,12 +33,24 @@ final class ConfigWiringTest
         Assert::array($this->di())->doesNotHaveKeys(MeterProviderInterface::class);
     }
 
-    public function webConfigBindsTheRedMiddleware(): void
+    public function webConfigBindsTheRedMiddlewareWithParams(): void
     {
+        /** @var array<string, mixed> $params */
+        $params = require dirname(__DIR__) . '/config/params.php';
+        $params['rasuvaeff/yii3-metrics']['red'] = [
+            'duration_buckets' => [0.1, 1.0],
+            'excluded_paths' => ['/metrics'],
+        ];
+
         /** @var array<string, mixed> $di */
-        $di = require dirname(__DIR__) . '/config/di-web.php';
+        $di = (static fn(array $params): array => require dirname(__DIR__) . '/config/di-web.php')($params);
 
         Assert::array($di)->hasKeys(RedMetricsMiddleware::class);
+
+        /** @var array{__construct(): array{durationBuckets: mixed, excludedPaths: mixed}} $definition */
+        $definition = $di[RedMetricsMiddleware::class];
+        Assert::same($definition['__construct()']['durationBuckets'], [0.1, 1.0]);
+        Assert::same($definition['__construct()']['excludedPaths'], ['/metrics']);
     }
 
     public function facadeBecomesNoOpWithTheNullProvider(): void
@@ -56,6 +68,7 @@ final class ConfigWiringTest
         $params = require dirname(__DIR__) . '/config/params.php';
 
         Assert::array($params)->hasKeys('rasuvaeff/yii3-metrics');
+        Assert::array($params['rasuvaeff/yii3-metrics']['red'])->hasKeys('duration_buckets', 'excluded_paths');
     }
 
     /**

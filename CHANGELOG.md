@@ -21,8 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   histograms are cumulative (`le`) with an implicit `+Inf` bucket.
 - `RedMetricsMiddleware` (PSR-15): `http_server_requests_total` counter and
   `http_server_request_duration_seconds` histogram, with an injectable
-  `RouteResolverInterface` (default `PathRouteResolver`) and custom histogram
-  bounds via `durationBuckets`.
+  `RouteResolverInterface` (default `PathRouteResolver`), custom histogram
+  bounds via `durationBuckets`, and `excludedPaths` for scrape/probe endpoints.
+  Both configurable via package params (`red.duration_buckets`,
+  `red.excluded_paths`).
 - `yiisoft/config` wiring: the core binds only the facade and the route resolver;
   the backend or app owns `MeterProviderInterface`.
 - Property tests (counter monotonicity, histogram bucket containment, label-name
