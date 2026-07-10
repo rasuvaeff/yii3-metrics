@@ -13,15 +13,16 @@ use Testo\Test;
 #[Covers(MetricKind::class)]
 final class MetricKindTest
 {
-    public function hasThreeKinds(): void
+    public function hasFourKinds(): void
     {
-        Assert::count(MetricKind::cases(), 3);
+        Assert::count(MetricKind::cases(), 4);
     }
 
     public function backingValues(): void
     {
         Assert::same(MetricKind::Counter->value, 'counter');
         Assert::same(MetricKind::Gauge->value, 'gauge');
+        Assert::same(MetricKind::UpDownCounter->value, 'up_down_counter');
         Assert::same(MetricKind::Histogram->value, 'histogram');
     }
 }

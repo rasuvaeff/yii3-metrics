@@ -41,6 +41,14 @@ final class NullMeter implements MeterInterface
     }
 
     #[\Override]
+    public function upDownCounter(string $name, string $help = '', array $labelNames = []): UpDownCounterInterface
+    {
+        Validation::metricName($name);
+
+        return NullUpDownCounter::instance();
+    }
+
+    #[\Override]
     public function histogram(
         string $name,
         string $help = '',

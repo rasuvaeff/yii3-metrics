@@ -20,6 +20,9 @@ final class InMemoryMeter implements MeterInterface
     /** @var array<string, InMemoryGauge> */
     private array $gauges = [];
 
+    /** @var array<string, InMemoryUpDownCounter> */
+    private array $upDownCounters = [];
+
     /** @var array<string, InMemoryHistogram> */
     private array $histograms = [];
 
@@ -37,6 +40,14 @@ final class InMemoryMeter implements MeterInterface
         Validation::metricName($name);
 
         return $this->gauges[$name] ??= new InMemoryGauge($name, $help);
+    }
+
+    #[\Override]
+    public function upDownCounter(string $name, string $help = '', array $labelNames = []): UpDownCounterInterface
+    {
+        Validation::metricName($name);
+
+        return $this->upDownCounters[$name] ??= new InMemoryUpDownCounter($name, $help);
     }
 
     #[\Override]
@@ -64,6 +75,10 @@ final class InMemoryMeter implements MeterInterface
 
         foreach ($this->gauges as $gauge) {
             $snapshots[] = $gauge->snapshot();
+        }
+
+        foreach ($this->upDownCounters as $upDownCounter) {
+            $snapshots[] = $upDownCounter->snapshot();
         }
 
         foreach ($this->histograms as $histogram) {

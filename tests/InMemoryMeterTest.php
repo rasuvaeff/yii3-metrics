@@ -13,7 +13,9 @@ use Rasuvaeff\Yii3Metrics\InMemoryGauge;
 use Rasuvaeff\Yii3Metrics\InMemoryHistogram;
 use Rasuvaeff\Yii3Metrics\InMemoryMeter;
 use Rasuvaeff\Yii3Metrics\InMemoryMeterProvider;
+use Rasuvaeff\Yii3Metrics\InMemoryUpDownCounter;
 use Rasuvaeff\Yii3Metrics\LabelSet;
+use Rasuvaeff\Yii3Metrics\MetricKind;
 use Rasuvaeff\Yii3Metrics\MetricSample;
 use Rasuvaeff\Yii3Metrics\MetricSnapshot;
 use Testo\Assert;
@@ -24,6 +26,7 @@ use Testo\Test;
 #[Covers(InMemoryMeter::class)]
 #[Covers(InMemoryCounter::class)]
 #[Covers(InMemoryGauge::class)]
+#[Covers(InMemoryUpDownCounter::class)]
 #[Covers(InMemoryHistogram::class)]
 #[Covers(InMemoryMeterProvider::class)]
 #[Covers(MetricSnapshot::class)]
@@ -43,6 +46,23 @@ final class InMemoryMeterTest
         $b->inc();
 
         Assert::same($meter->snapshots()[0]->samples[0]->value, 2.0);
+    }
+
+    public function upDownCounterAccumulatesSignedDeltas(): void
+    {
+        $meter = new InMemoryMeter();
+
+        $a = $meter->upDownCounter('inflight_requests');
+        $b = $meter->upDownCounter('inflight_requests');
+        Assert::same($a, $b);
+        Assert::instanceOf($a, InMemoryUpDownCounter::class);
+
+        $a->add(5.0);
+        $b->add(-2.0);
+
+        $snapshot = $meter->snapshots()[0];
+        Assert::same($snapshot->kind, MetricKind::UpDownCounter);
+        Assert::same($snapshot->samples[0]->value, 3.0);
     }
 
     public function counterRejectsNegativeIncrement(): void

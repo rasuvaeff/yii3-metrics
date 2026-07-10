@@ -11,6 +11,7 @@ use Rasuvaeff\Yii3Metrics\NullGauge;
 use Rasuvaeff\Yii3Metrics\NullHistogram;
 use Rasuvaeff\Yii3Metrics\NullMeter;
 use Rasuvaeff\Yii3Metrics\NullMeterProvider;
+use Rasuvaeff\Yii3Metrics\NullUpDownCounter;
 use Testo\Assert;
 use Testo\Codecov\Covers;
 use Testo\Test;
@@ -19,6 +20,7 @@ use Testo\Test;
 #[Covers(NullMeter::class)]
 #[Covers(NullCounter::class)]
 #[Covers(NullGauge::class)]
+#[Covers(NullUpDownCounter::class)]
 #[Covers(NullHistogram::class)]
 #[Covers(NullMeterProvider::class)]
 final class NullMeterTest
@@ -29,10 +31,12 @@ final class NullMeterTest
 
         $counter = $meter->counter('c');
         $gauge = $meter->gauge('g');
+        $upDown = $meter->upDownCounter('u');
         $histogram = $meter->histogram('h');
 
         Assert::instanceOf($counter, NullCounter::class);
         Assert::instanceOf($gauge, NullGauge::class);
+        Assert::instanceOf($upDown, NullUpDownCounter::class);
         Assert::instanceOf($histogram, NullHistogram::class);
 
         // No-ops — nothing to observe, must not throw.
@@ -40,6 +44,7 @@ final class NullMeterTest
         $gauge->set(3.0);
         $gauge->inc();
         $gauge->dec();
+        $upDown->add(-1.0);
         $histogram->observe(0.2);
 
         Assert::same(NullCounter::instance(), $counter);
@@ -68,6 +73,13 @@ final class NullMeterTest
 
         try {
             $meter->counter('bad.name');
+            Assert::fail('expected an InvalidArgumentException for the metric name');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('Invalid metric name');
+        }
+
+        try {
+            $meter->upDownCounter('bad.name');
             Assert::fail('expected an InvalidArgumentException for the metric name');
         } catch (InvalidArgumentException $e) {
             Assert::string($e->getMessage())->contains('Invalid metric name');

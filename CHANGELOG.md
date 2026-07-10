@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GaugeInterface`, `HistogramInterface`; `MeterInterface` / `MeterProviderInterface`.
 - Instruments are interfaces; the core ships `Null*` (no-op) and `InMemory*`
   (single-process dev/test with `snapshots()`) implementations.
+- `UpDownCounterInterface` (`add(±δ)`) — counted ups and downs (in-flight
+  requests, pool size); unlike a gauge it aggregates correctly across
+  short-lived php-fpm workers. `Null*`/`InMemory*` implementations,
+  `MetricKind::UpDownCounter`.
 - `LabelSet` (validated names, canonical order), `MetricKind`, `MetricSnapshot`,
   `MetricSample`.
 - Meters memoize instruments by name; counters reject a negative increment;

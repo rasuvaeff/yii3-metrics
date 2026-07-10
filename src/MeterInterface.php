@@ -28,6 +28,11 @@ interface MeterInterface
 
     /**
      * @param list<string> $labelNames
+     */
+    public function upDownCounter(string $name, string $help = '', array $labelNames = []): UpDownCounterInterface;
+
+    /**
+     * @param list<string> $labelNames
      * @param list<float> $buckets finite upper bounds; `+Inf` is appended implicitly
      */
     public function histogram(

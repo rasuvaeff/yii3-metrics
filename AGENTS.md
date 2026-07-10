@@ -12,7 +12,8 @@ core ships only `Null*` (no-op) and `InMemory*` (single-process dev/test) impls.
 Namespace: `Rasuvaeff\Yii3Metrics`.
 
 Public API: `MetricRegistry` (facade), `MeterProviderInterface`, `MeterInterface`,
-`CounterInterface`, `GaugeInterface`, `HistogramInterface`, `LabelSet`,
+`CounterInterface`, `GaugeInterface`, `UpDownCounterInterface`,
+`HistogramInterface`, `LabelSet`,
 `MetricKind`, `MetricSnapshot`, `MetricSample`, `Null*` and `InMemory*`
 (meter/provider/counter/gauge/histogram), `RedMetricsMiddleware`,
 `RouteResolverInterface`, `PathRouteResolver`, `CurrentRouteResolver`,
@@ -43,6 +44,10 @@ the app (`MeterProviderInterface => NullMeterProvider`). Binding it twice is a
      monotonicity; `LabelSet` validates label-name format in its constructor.
    - **Recording checks only in recording impls** (`InMemory*`, backends), NOT
      `Null*`: a counter rejects a negative increment.
+   - **Gauge vs UpDownCounter**: gauge = measured absolute (`set()`);
+     up-down counter = counted deltas (`add(±δ)`, no set) — the fpm-safe choice
+     for counted values. Backends map it to promphp gauge (`incBy`) / OTel
+     UpDownCounter respectively.
 4. **Preserve the public contract.** Update README + tests with any API change.
 
 ## Commands

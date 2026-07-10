@@ -38,6 +38,14 @@ final readonly class MetricRegistry
 
     /**
      * @param list<string> $labelNames
+     */
+    public function upDownCounter(string $name, string $help = '', array $labelNames = []): UpDownCounterInterface
+    {
+        return $this->meter->upDownCounter($name, $help, $labelNames);
+    }
+
+    /**
+     * @param list<string> $labelNames
      * @param list<float> $buckets
      */
     public function histogram(

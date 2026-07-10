@@ -23,9 +23,10 @@ final class MetricRegistryTest
 
         $registry->counter('http_requests_total')->inc(2.0);
         $registry->gauge('inflight_requests')->set(3.0);
+        $registry->upDownCounter('db_pool_size')->add(1.0);
         $registry->histogram('request_seconds')->observe(0.1);
 
-        Assert::count($provider->snapshots(), 3);
+        Assert::count($provider->snapshots(), 4);
     }
 
     public function memoizesInstrumentsAcrossCalls(): void

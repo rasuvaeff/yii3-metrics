@@ -42,17 +42,27 @@ use Rasuvaeff\Yii3Metrics\MetricRegistry;
 $orders = $registry->counter('orders_total', 'Orders placed', ['channel']);
 $orders->inc(1.0, new LabelSet(['channel' => 'web']));
 
-$inflight = $registry->gauge('inflight_jobs', 'Jobs in flight');
-$inflight->inc();
-$inflight->dec();
+$inflight = $registry->upDownCounter('inflight_jobs', 'Jobs in flight');
+$inflight->add(1.0);   // job started
+$inflight->add(-1.0);  // job finished
+
+$temperature = $registry->gauge('room_temperature', 'Measured value');
+$temperature->set(21.5);
 
 $latency = $registry->histogram('db_query_seconds', 'Query time', ['op'], [0.001, 0.01, 0.1]);
 $latency->observe(0.023, new LabelSet(['op' => 'select']));
 ```
 
-Instruments are memoized by name — asking for `counter('orders_total')` again
-returns the same accumulating instrument. A counter rejects a negative increment
-(use a gauge for values that go down).
+Instruments record into per-name accumulating state — asking for
+`counter('orders_total')` again returns an instrument over the same series. A
+counter rejects a negative increment.
+
+**Gauge vs up-down counter.** A gauge is for a *measured absolute value*
+(`set()` — temperature, disk usage); an up-down counter is for *counted ups and
+downs* (`add(±δ)` — in-flight requests, pool size). Prefer the up-down counter
+for counted values: each process contributes deltas, so it aggregates correctly
+across short-lived php-fpm workers, where a gauge's `inc()`/`dec()` (kept for
+single-process convenience) would restart from the process-local value.
 
 ### Naming & labels
 
@@ -117,13 +127,13 @@ $snapshots = $provider->snapshots(); // list<MetricSnapshot>, no timestamp
 
 | Type | Role |
 |---|---|
-| `MetricRegistry` | facade: `counter/gauge/histogram(name, help, labelNames, buckets)` |
+| `MetricRegistry` | facade: `counter/gauge/upDownCounter/histogram(name, help, labelNames, buckets)` |
 | `MeterProviderInterface` / `MeterInterface` | swappable backend entry point; a meter creates and memoizes instruments |
-| `CounterInterface` / `GaugeInterface` / `HistogramInterface` | instrument contracts |
-| `LabelSet` / `MetricKind` | validated label pairs / instrument kind enum (`Counter`, `Gauge`, `Histogram`) |
+| `CounterInterface` / `GaugeInterface` / `UpDownCounterInterface` / `HistogramInterface` | instrument contracts |
+| `LabelSet` / `MetricKind` | validated label pairs / instrument kind enum (`Counter`, `Gauge`, `UpDownCounter`, `Histogram`) |
 | `MetricSnapshot` / `MetricSample` | collected state: a metric (name, kind, help) and its per-label-set samples |
-| `NullMeterProvider`, `NullMeter`, `NullCounter`, `NullGauge`, `NullHistogram` | no-op backend (config-only default; still validates structure) |
-| `InMemoryMeterProvider`, `InMemoryMeter`, `InMemoryCounter`, `InMemoryGauge`, `InMemoryHistogram` | single-process dev/test backend with `snapshots()` |
+| `NullMeterProvider`, `NullMeter`, `NullCounter`, `NullGauge`, `NullUpDownCounter`, `NullHistogram` | no-op backend (config-only default; still validates structure) |
+| `InMemoryMeterProvider`, `InMemoryMeter`, `InMemoryCounter`, `InMemoryGauge`, `InMemoryUpDownCounter`, `InMemoryHistogram` | single-process dev/test backend with `snapshots()` |
 | `RedMetricsMiddleware`, `RouteResolverInterface`, `PathRouteResolver` | PSR-15 RED instrumentation |
 | `CurrentRouteResolver` | route label from the matched `yiisoft/router` pattern (optional dep) |
 
