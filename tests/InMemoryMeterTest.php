@@ -167,7 +167,7 @@ final class InMemoryMeterTest
     }
 
     /** @return array<string, ArbitraryInterface> */
-    private function counterAccumulatesToTheSumOfIncrementsGenerators(): array
+    public static function counterAccumulatesToTheSumOfIncrementsGenerators(): array
     {
         return [
             'amounts' => Gen::nonEmptyArrayOf(Gen::floatBetween(0.0, 1000.0)),
@@ -193,7 +193,7 @@ final class InMemoryMeterTest
     }
 
     /** @return array<string, ArbitraryInterface> */
-    private function histogramBucketsAreCumulativeGenerators(): array
+    public static function histogramBucketsAreCumulativeGenerators(): array
     {
         return [
             'value' => Gen::floatBetween(-1.0, 10.0),
