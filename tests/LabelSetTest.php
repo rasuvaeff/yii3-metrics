@@ -82,7 +82,7 @@ final class LabelSetTest
     }
 
     /** @return array<string, ArbitraryInterface> */
-    private function acceptsValidLabelNamesGenerators(): array
+    public static function acceptsValidLabelNamesGenerators(): array
     {
         return [
             'name' => Gen::map(

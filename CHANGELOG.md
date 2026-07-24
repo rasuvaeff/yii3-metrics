@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.0 — 2026-07-25
+
+- Ship an AI agent skill (`resources/skills/rasuvaeff-yii3-metrics/SKILL.md` +
+  `extra.skills` in composer.json): projects using the `llm/skills` Composer
+  plugin get the skill synced into `.agents/skills/` automatically on install.
+- Bump `rasuvaeff/property-testing` dev dependency to `^2.6`.
+- Make property-generator methods `public static` (guards against rector
+  `RemoveUnusedPrivateMethodRector` deleting reflection-only methods).
+
 ## 1.0.0 — 2026-07-10
 
 - Vendor-neutral metrics core: `MetricRegistry` facade over `CounterInterface`,
