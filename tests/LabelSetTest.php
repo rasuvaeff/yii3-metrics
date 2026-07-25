@@ -72,6 +72,7 @@ final class LabelSetTest
         yield 'hyphen' => ['a-b'];
         yield 'dot' => ['a.b'];
         yield 'empty' => [''];
+        yield 'trailing newline' => ["abc\n"];
         yield 'numeric key' => [0];
     }
 

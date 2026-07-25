@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.1 — 2026-07-25
+
+- Reject trailing newlines in metric and label names: anchor the validation
+  patterns with `\z` instead of `$` in `Internal\Validation::NAME_PATTERN`
+  (metric name) and `LabelSet::NAME_PATTERN` (label name). PCRE `$` matches
+  before a trailing `\n`, which let `"<name>\n"` slip through and reach the
+  exporter.
+
 ## 1.1.0 — 2026-07-25
 
 - Ship an AI agent skill (`resources/skills/rasuvaeff-yii3-metrics/SKILL.md` +
