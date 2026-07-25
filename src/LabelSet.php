@@ -16,7 +16,7 @@ use Rasuvaeff\Yii3Metrics\Exception\InvalidArgumentException;
  */
 final readonly class LabelSet
 {
-    private const string NAME_PATTERN = '/^[a-zA-Z_]\w*$/';
+    private const string NAME_PATTERN = '/^[a-zA-Z_]\w*\z/';
 
     /** @var array<non-empty-string, string> */
     public array $labels;

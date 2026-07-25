@@ -38,6 +38,7 @@ final class ValidationTest
         yield 'leading digit' => ['1metric', false];
         yield 'hyphen' => ['a-b', false];
         yield 'empty' => ['', false];
+        yield 'trailing newline' => ["http_requests_total\n", false];
     }
 
     public function defaultsToPrometheusBucketsWhenEmpty(): void
