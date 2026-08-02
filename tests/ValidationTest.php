@@ -13,6 +13,7 @@ use Testo\Test;
 
 #[Test]
 #[Covers(Validation::class)]
+#[Covers(InvalidArgumentException::class)]
 final class ValidationTest
 {
     #[DataProvider('nameProvider')]

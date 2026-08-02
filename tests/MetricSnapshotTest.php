@@ -56,4 +56,20 @@ final class MetricSnapshotTest
 
         Assert::true($a->equals($b));
     }
+
+    public function snapshotEqualityDetectsMismatchBeyondTheFirstSortedSample(): void
+    {
+        $shared = new MetricSample(new LabelSet(['a' => '1']), 1.0);
+
+        $a = new MetricSnapshot('m', MetricKind::Counter, 'h', [
+            $shared,
+            new MetricSample(new LabelSet(['b' => '2']), 2.0),
+        ]);
+        $b = new MetricSnapshot('m', MetricKind::Counter, 'h', [
+            $shared,
+            new MetricSample(new LabelSet(['b' => '2']), 99.0),
+        ]);
+
+        Assert::false($a->equals($b));
+    }
 }

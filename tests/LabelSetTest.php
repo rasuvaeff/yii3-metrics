@@ -16,6 +16,7 @@ use Testo\Test;
 
 #[Test]
 #[Covers(LabelSet::class)]
+#[Covers(InvalidArgumentException::class)]
 final class LabelSetTest
 {
     public function storesAndCanonicalisesLabels(): void
