@@ -23,6 +23,7 @@ use Testo\Test;
 #[Covers(NullUpDownCounter::class)]
 #[Covers(NullHistogram::class)]
 #[Covers(NullMeterProvider::class)]
+#[Covers(InvalidArgumentException::class)]
 final class NullMeterTest
 {
     public function instrumentsAreInertSingletons(): void
@@ -55,6 +56,7 @@ final class NullMeterTest
         Assert::same(NullCounter::instance(), NullCounter::instance());
         Assert::same(NullGauge::instance(), NullGauge::instance());
         Assert::same(NullHistogram::instance(), NullHistogram::instance());
+        Assert::same(NullUpDownCounter::instance(), NullUpDownCounter::instance());
         Assert::same(NullMeter::instance(), NullMeter::instance());
     }
 
@@ -80,6 +82,20 @@ final class NullMeterTest
 
         try {
             $meter->upDownCounter('bad.name');
+            Assert::fail('expected an InvalidArgumentException for the metric name');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('Invalid metric name');
+        }
+
+        try {
+            $meter->gauge('bad.name');
+            Assert::fail('expected an InvalidArgumentException for the metric name');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('Invalid metric name');
+        }
+
+        try {
+            $meter->histogram('bad.name');
             Assert::fail('expected an InvalidArgumentException for the metric name');
         } catch (InvalidArgumentException $e) {
             Assert::string($e->getMessage())->contains('Invalid metric name');

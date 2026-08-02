@@ -31,6 +31,7 @@ use Testo\Test;
 #[Covers(InMemoryMeterProvider::class)]
 #[Covers(MetricSnapshot::class)]
 #[Covers(MetricSample::class)]
+#[Covers(InvalidArgumentException::class)]
 final class InMemoryMeterTest
 {
     public function memoizesInstrumentsByName(): void
@@ -86,6 +87,68 @@ final class InMemoryMeterTest
         $gauge->dec(3.0);
 
         Assert::same($this->onlySample($gauge)->value, 12.0);
+    }
+
+    public function gaugeIncFromFreshStateStartsAtZero(): void
+    {
+        $gauge = (new InMemoryMeter())->gauge('g');
+
+        $gauge->inc(5.0);
+
+        Assert::same($this->onlySample($gauge)->value, 5.0);
+    }
+
+    public function gaugeIsMemoizedByName(): void
+    {
+        $meter = new InMemoryMeter();
+
+        $a = $meter->gauge('g');
+        $b = $meter->gauge('g');
+
+        Assert::same($a, $b);
+    }
+
+    public function histogramIsMemoizedByName(): void
+    {
+        $meter = new InMemoryMeter();
+
+        $a = $meter->histogram('h');
+        $b = $meter->histogram('h');
+
+        Assert::same($a, $b);
+    }
+
+    public function factoriesValidateTheMetricName(): void
+    {
+        $meter = new InMemoryMeter();
+
+        try {
+            $meter->counter('bad.name');
+            Assert::fail('expected an InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('Invalid metric name');
+        }
+
+        try {
+            $meter->gauge('bad.name');
+            Assert::fail('expected an InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('Invalid metric name');
+        }
+
+        try {
+            $meter->upDownCounter('bad.name');
+            Assert::fail('expected an InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('Invalid metric name');
+        }
+
+        try {
+            $meter->histogram('bad.name');
+            Assert::fail('expected an InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('Invalid metric name');
+        }
     }
 
     public function histogramAggregatesCountAndSum(): void
