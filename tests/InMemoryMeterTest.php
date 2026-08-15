@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rasuvaeff\Yii3Metrics\Tests;
 
 use Rasuvaeff\PropertyTesting\ArbitraryInterface;
+use Rasuvaeff\PropertyTesting\Classify;
 use Rasuvaeff\PropertyTesting\Gen;
 use Rasuvaeff\PropertyTesting\Property;
 use Rasuvaeff\Yii3Metrics\Exception\InvalidArgumentException;
@@ -245,6 +246,16 @@ final class InMemoryMeterTest
 
         $histogram->observe($value);
 
+        // Every bucket has to be the one a value lands in at least sometimes:
+        // a run whose values all fell past 5.0 would only ever check the +Inf
+        // bucket and say nothing about the cumulative counts below it.
+        // Floors are under half the share the range implies: over
+        // [-1.0, 10.0] the first bucket is ~10% of draws, the middle two
+        // ~8%, and everything past 5.0 ~45%.
+        Classify::cover($value <= 0.1, 'lands in the first bucket', 4.0);
+        Classify::cover($value > 0.1 && $value <= 1.0, 'lands mid-range', 3.0);
+        Classify::cover($value > 5.0, 'past the last finite bound', 20.0);
+
         $sample = $meter->snapshots()[0]->samples[0];
         Assert::same($sample->value, 1.0);
         Assert::same($sample->sum, $value);
@@ -261,6 +272,62 @@ final class InMemoryMeterTest
         return [
             'value' => Gen::floatBetween(-1.0, 10.0),
         ];
+    }
+
+    /**
+     * @return iterable<string, array{float}>
+     */
+    public static function histogramBucketsAreCumulativeExamples(): iterable
+    {
+        // Every bound exactly: Prometheus histogram buckets are `le` — less
+        // than or equal — and a value sitting on a bound belongs to it.
+        yield 'exactly the first bound' => [0.1];
+        yield 'exactly the second bound' => [0.5];
+        yield 'exactly the third bound' => [1.0];
+        yield 'exactly the last finite bound' => [5.0];
+        yield 'zero' => [0.0];
+        yield 'negative' => [-1.0];
+        yield 'past every finite bound' => [10.0];
+    }
+
+    #[Property(runs: 200)]
+    public function counterNeverGoesBackwards(array $amounts): void
+    {
+        $meter = new InMemoryMeter();
+        $counter = $meter->counter('c');
+        $previous = 0.0;
+
+        Classify::cover(\count($amounts) > 3, 'several increments', 40.0);
+        Classify::when(\in_array(0.0, $amounts, strict: true), 'a zero increment');
+
+        foreach ($amounts as $amount) {
+            $counter->inc($amount);
+            $current = $meter->snapshots()[0]->samples[0]->value;
+
+            // A counter is the one instrument a scrape may difference across
+            // two reads; a single decrease turns that difference into a
+            // negative rate, which downstream reads as a counter reset.
+            Assert::true($current >= $previous);
+            $previous = $current;
+        }
+    }
+
+    /** @return array<string, ArbitraryInterface> */
+    public static function counterNeverGoesBackwardsGenerators(): array
+    {
+        return [
+            'amounts' => Gen::nonEmptyArrayOf(Gen::floatBetween(0.0, 1000.0), 8),
+        ];
+    }
+
+    /**
+     * @return iterable<string, array{list<float>}>
+     */
+    public static function counterAccumulatesToTheSumOfIncrementsExamples(): iterable
+    {
+        yield 'a single zero' => [[0.0]];
+        yield 'zeros only' => [[0.0, 0.0, 0.0]];
+        yield 'a large value followed by a tiny one' => [[1000.0, 0.000001]];
     }
 
     private function onlySample(InMemoryGauge|InMemoryHistogram $instrument): MetricSample
