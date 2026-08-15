@@ -61,11 +61,11 @@ final readonly class RedMetricsMiddleware implements MiddlewareInterface
     #[\Override]
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        if (\in_array($request->getUri()->getPath(), $this->excludedPaths, true)) {
+        if (\in_array($request->getUri()->getPath(), $this->excludedPaths, strict: true)) {
             return $handler->handle($request);
         }
 
-        $start = hrtime(true);
+        $start = hrtime(as_number: true);
         $status = self::STATUS_ON_THROW;
 
         try {
@@ -81,7 +81,7 @@ final readonly class RedMetricsMiddleware implements MiddlewareInterface
             ]);
 
             $this->requests->inc(1.0, $labels);
-            $this->duration->observe((float) (hrtime(true) - $start) / 1e9, $labels);
+            $this->duration->observe((float) (hrtime(as_number: true) - $start) / 1e9, $labels);
         }
     }
 }

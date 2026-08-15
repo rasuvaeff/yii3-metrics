@@ -66,7 +66,7 @@ final class NullMeterTest
         // concern, so this must NOT throw.
         NullCounter::instance()->inc(-1.0);
 
-        Assert::true(true);
+        Assert::true(actual: true);
     }
 
     public function stillValidatesMetricNameAndBuckets(): void
