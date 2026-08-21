@@ -58,7 +58,7 @@
     //     constructor already stringifies any non-bool/non-string scalar via its
     //     own `default => (string) $value` match arm — the explicit cast here is
     //     redundant with that downstream coercion, not a behavioral difference.
-    "minMsi": 85,
+    "minMsi": 96,
     "mutators": {
         "@default": true
     }
