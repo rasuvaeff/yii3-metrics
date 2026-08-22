@@ -4,16 +4,21 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3Metrics\Tests;
 
+use Nyholm\Psr7\ServerRequest;
+use Rasuvaeff\Yii3Metrics\BoundedRouteResolver;
 use Rasuvaeff\Yii3Metrics\ConstantRouteResolver;
+use Rasuvaeff\Yii3Metrics\CurrentRouteResolver;
 use Rasuvaeff\Yii3Metrics\MeterProviderInterface;
 use Rasuvaeff\Yii3Metrics\MetricRegistry;
 use Rasuvaeff\Yii3Metrics\NullCounter;
 use Rasuvaeff\Yii3Metrics\NullMeterProvider;
+use Rasuvaeff\Yii3Metrics\PathRouteResolver;
 use Rasuvaeff\Yii3Metrics\RedMetricsMiddleware;
 use Rasuvaeff\Yii3Metrics\RouteResolverInterface;
 use Testo\Assert;
 use Testo\Codecov\CoversNothing;
 use Testo\Test;
+use Yiisoft\Router\CurrentRoute;
 
 /**
  * `config/*.php` are outside the cs/psalm/testo gate — this guards the wiring
@@ -42,6 +47,30 @@ final class ConfigWiringTest
     public function coreDoesNotBindTheSwappableProviderInterface(): void
     {
         Assert::array($this->di())->doesNotHaveKeys(MeterProviderInterface::class);
+    }
+
+    /**
+     * The README documents three ways to opt into a route breakdown by rebinding
+     * `RouteResolverInterface`. A merge harness cannot see them — it merges the
+     * vendor layer, while the recipe lives in the application layer — so the
+     * recipe is executed here verbatim instead.
+     */
+    public function everyDocumentedRouteResolverOptInResolves(): void
+    {
+        $request = new ServerRequest('GET', '/users/42');
+
+        $current = new CurrentRouteResolver(new CurrentRoute());
+        $bounded = (static fn(): RouteResolverInterface
+            => new BoundedRouteResolver(new PathRouteResolver(), limit: 100))();
+        $path = new PathRouteResolver();
+
+        foreach ([$current, $bounded, $path] as $resolver) {
+            Assert::instanceOf($resolver, RouteResolverInterface::class);
+        }
+
+        Assert::same($current->resolve($request), '(unmatched)');
+        Assert::same($bounded->resolve($request), '/users/42');
+        Assert::same($path->resolve($request), '/users/42');
     }
 
     public function webConfigBindsTheRedMiddlewareWithParams(): void
