@@ -96,6 +96,49 @@ final class LabelSetTest
     }
 
     /**
+     * Two-sided: the alphabet mixes characters that are legal in a label name
+     * with ones that are not, so the generator produces accepted AND rejected
+     * strings without an `Assume`. The property is that acceptance agrees with
+     * the documented pattern in both directions — a one-sided "valid names are
+     * accepted" property cannot see a validator that accepts too much.
+     */
+    #[Property(runs: 300, timeoutMs: 1000)]
+    public function labelNameAcceptanceMatchesThePattern(string $name): void
+    {
+        $accepted = true;
+
+        try {
+            new LabelSet([$name => 'v']);
+        } catch (InvalidArgumentException) {
+            $accepted = false;
+        }
+
+        Classify::cover($accepted, 'accepted name', 15.0);
+        Classify::cover(!$accepted, 'rejected name', 15.0);
+
+        Assert::same($accepted, $name !== '' && preg_match('/^[a-zA-Z_]\w*\z/', $name) === 1);
+    }
+
+    /** @return array<string, ArbitraryInterface> */
+    public static function labelNameAcceptanceMatchesThePatternGenerators(): array
+    {
+        return ['name' => Gen::stringFrom('aZ_09-.', 0, 4)];
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function labelNameAcceptanceMatchesThePatternExamples(): iterable
+    {
+        yield 'empty' => [''];
+        yield 'leading digit' => ['1abc'];
+        yield 'hyphen' => ['a-b'];
+        yield 'dot' => ['a.b'];
+        // `$` would match here; the pattern is anchored with `\z` on purpose.
+        yield 'trailing newline' => ["abc\n"];
+        yield 'leading underscore' => ['_ok'];
+        yield 'digits after a letter' => ['a09'];
+    }
+
+    /**
      * The exact pair from the review: with the old `name=value,…` join both sets
      * rendered as `a=1,b=2,b=3`, so every consumer that aggregates by `key()`
      * merged two unrelated series into one.
