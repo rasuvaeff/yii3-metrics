@@ -50,7 +50,9 @@ Namespace `Rasuvaeff\Yii3Metrics`.
    a real route breakdown, rebind `RouteResolverInterface` to
    `CurrentRouteResolver` (matched `yiisoft/router` pattern, e.g. `/users/{id}`),
    or to `BoundedRouteResolver` around `PathRouteResolver` when you want raw
-   paths capped at N distinct values. Keep `RedMetricsMiddleware` BEFORE the
+   paths capped at N distinct values — the cap is per resolver instance, i.e.
+   per process (`limit × workers` on fpm), not a deployment-wide guarantee.
+   Keep `RedMetricsMiddleware` BEFORE the
    router middleware, and exclude scrape endpoints via
    `excludedPaths: ['/metrics']`.
 

@@ -46,14 +46,19 @@ the app (`MeterProviderInterface => NullMeterProvider`). Binding it twice is a
    - **Structural validation always** (even in `NullMeter`): metric-name regex
      (`^[a-zA-Z_:][a-zA-Z0-9_:]*$`, Prometheus — no dots) and histogram bucket
      monotonicity; `LabelSet` validates label-name format in its constructor.
-   - **Recording checks only in recording impls** (`InMemory*`, backends), NOT
-     `Null*`: a counter rejects a negative increment, and every accumulating
+   - **Non-finite guards in EVERY impl, `Null*` included**: every accumulating
      write (`inc`/`observe`/`add`/gauge `inc`/`dec`) rejects `NAN`/`±INF` via
-     `Validation::finiteAmount()`. Gauge `set()` is absolute, so it allows `±INF`
-     but rejects `NAN` (`Validation::notNan()`) — promphp coerces `NAN` to an
-     invalid exposition token and raises a PHP warning doing it. Any new backend
-     must copy both guards; a backend without them makes `NAN` behave differently
+     `Validation::finiteAmount()`, and gauge `set()` allows `±INF` but rejects
+     `NAN` (`Validation::notNan()`) — promphp coerces `NAN` to an invalid
+     exposition token and raises a PHP warning doing it. Whether metrics are
+     enabled or disabled must not change what input is accepted: a disabled
+     stack that silently swallows a recording the enabled one would reject
+     hides the failure until the backend is switched on. Any new backend must
+     copy both guards; a backend without them makes `NAN` behave differently
      per backend, which is the bug they were added for.
+   - **Recording-impl-only checks stay out of `Null*`**: the counter's
+     negative-increment rejection is a recording-impl concern — `NullCounter`
+     accepts it.
    - **Gauge vs UpDownCounter**: gauge = measured absolute (`set()`);
      up-down counter = counted deltas (`add(±δ)`, no set) — the fpm-safe choice
      for counted values. Backends map it to promphp gauge (`incBy`) / OTel
@@ -89,7 +94,9 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
   copies path tokens (`/reset-password/<token>`) into `/metrics`. Never restore a
   URI-reading default. Applications opt in by rebinding
   `RouteResolverInterface` to `CurrentRouteResolver` (matched `yiisoft/router`
-  pattern), `BoundedRouteResolver` around `PathRouteResolver` (capped raw paths),
+  pattern), `BoundedRouteResolver` around `PathRouteResolver` (capped raw
+  paths — the cap is per resolver instance, i.e. per process; the global bound
+  on fpm is `limit × workers`, not a deployment-wide guarantee),
   `PathRouteResolver`, or the Prometheus backend's `SanitizingRouteResolver`.
 - **`LabelSet::key()` must stay injective.** Values are untrusted strings that can
   contain the separators, so every name and value is length-prefixed. A plain

@@ -155,6 +155,11 @@ RouteResolverInterface::class => static fn (): RouteResolverInterface
 RouteResolverInterface::class => PathRouteResolver::class,
 ```
 
+Лимит варианта 2 действует **на экземпляр резолвера**, а экземпляр живёт в одном
+процессе: на php-fpm каждый воркер узнаёт свой набор различных путей, поэтому
+худший случай — `limit × workers` серий. Это сходящаяся граница, а не
+деплой-глобальная гарантия кардинальности.
+
 Prometheus-backend дополнительно даёт `SanitizingRouteResolver`, который
 схлопывает числовые id и UUID в сыром пути. Он закрывает только случай id —
 произвольные сканерные пути и токены не-UUID-формата остаются уникальными,

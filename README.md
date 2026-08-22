@@ -151,6 +151,11 @@ RouteResolverInterface::class => static fn (): RouteResolverInterface
 RouteResolverInterface::class => PathRouteResolver::class,
 ```
 
+Option 2's cap is **per resolver instance**, and an instance lives in one
+process: on php-fpm every worker learns its own set of distinct paths, so the
+worst case is `limit × workers` series. That is a converging bound, not a
+deployment-wide cardinality guarantee.
+
 The Prometheus backend additionally ships `SanitizingRouteResolver`, which
 collapses numeric ids and UUIDs in a raw path. It narrows the id case only —
 arbitrary scanner paths and non-UUID tokens stay unique, so treat it as a
