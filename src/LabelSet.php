@@ -65,13 +65,21 @@ final readonly class LabelSet
 
     /**
      * Canonical string key for storing values per label set.
+     *
+     * Every name and value is length-prefixed (`<len>:<bytes>`), which makes the
+     * key injective: distinct label sets always produce distinct keys, and the
+     * key can be parsed back into the exact pairs. A plain `name=value,…` join
+     * is ambiguous, because label values are arbitrary untrusted strings that may
+     * themselves contain `=` and `,` — `['a' => '1,b=2', 'b' => '3']` and
+     * `['a' => '1', 'b' => '2,b=3']` both rendered as `a=1,b=2,b=3` and were
+     * merged into one series wherever this key aggregates values.
      */
     public function key(): string
     {
         $parts = [];
 
         foreach ($this->labels as $name => $value) {
-            $parts[] = $name . '=' . $value;
+            $parts[] = \strlen($name) . ':' . $name . '=' . \strlen($value) . ':' . $value;
         }
 
         return implode(',', $parts);

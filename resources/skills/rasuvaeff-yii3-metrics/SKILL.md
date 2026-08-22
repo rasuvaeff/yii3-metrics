@@ -38,12 +38,23 @@ Namespace `Rasuvaeff\Yii3Metrics`.
 4. **Counted values → `upDownCounter`, measured values → `gauge`.**
    `add(±δ)` deltas aggregate correctly across php-fpm workers; gauge
    `inc()`/`dec()` tallies are process-local. Counters reject negative `inc()`.
+   Every accumulating write (`inc`/`observe`/`add`, gauge `inc`/`dec`) also
+   rejects `NAN`/`±INF` — `NAN` is absorbing and would poison the series total
+   permanently. Gauge `set()` is absolute: `±INF` is fine, `NAN` still throws
+   (no renderable exposition token).
 
-5. **The RED `route` label defaults to the raw path — a cardinality footgun.**
-   In production rebind `RouteResolverInterface => CurrentRouteResolver`
-   (matched `yiisoft/router` pattern, e.g. `/users/{id}`), and keep
-   `RedMetricsMiddleware` BEFORE the router middleware. Exclude scrape
-   endpoints via `excludedPaths: ['/metrics']`.
+5. **The RED `route` label is opt-in; the default never reads the request URI.**
+   Out of the box it is the constant `(unset)` (`ConstantRouteResolver`) — a raw
+   path is attacker-controlled, so as a default it mints a series per scanned
+   URL and copies path tokens (`/reset-password/<token>`) into `/metrics`. To get
+   a real route breakdown, rebind `RouteResolverInterface` to
+   `CurrentRouteResolver` (matched `yiisoft/router` pattern, e.g. `/users/{id}`),
+   or to `BoundedRouteResolver` around `PathRouteResolver` when you want raw
+   paths capped at N distinct values — the cap is per resolver instance, i.e.
+   per process (`limit × workers` on fpm), not a deployment-wide guarantee.
+   Keep `RedMetricsMiddleware` BEFORE the
+   router middleware, and exclude scrape endpoints via
+   `excludedPaths: ['/metrics']`.
 
 ## Canonical usage
 

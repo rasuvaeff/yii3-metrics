@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace Rasuvaeff\Yii3Metrics;
 
 use Rasuvaeff\Yii3Metrics\Exception\InvalidArgumentException;
+use Rasuvaeff\Yii3Metrics\Internal\Validation;
 
 /**
  * Single-process counter for tests and dev. A recording counter rejects a
- * negative increment (use a {@see GaugeInterface} instead).
+ * negative increment (use a {@see GaugeInterface} instead) and a non-finite one.
  *
  * @api
  */
@@ -28,6 +29,8 @@ final class InMemoryCounter implements CounterInterface
     #[\Override]
     public function inc(float $amount = 1.0, LabelSet $labels = new LabelSet()): void
     {
+        Validation::finiteAmount($amount);
+
         if ($amount < 0) {
             throw new InvalidArgumentException('Counter cannot be decremented; use a gauge');
         }

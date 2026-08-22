@@ -15,8 +15,15 @@ use Psr\Http\Server\RequestHandlerInterface;
  * `http_server_request_duration_seconds` histogram, both labelled by method,
  * route, and status.
  *
- * The `route` label defaults to the request path — wire a router-aware
- * {@see RouteResolverInterface} to avoid a series per URL id (cardinality).
+ * The `route` label defaults to the constant `(unset)`
+ * ({@see ConstantRouteResolver}): a `route` built from the request path is
+ * attacker-controlled, so as a default it both explodes the series count (one
+ * series per scanned URL) and copies single-use path tokens
+ * (`/reset-password/<token>`) into the exposition. Rate, errors and duration are
+ * still broken down by `method` and `status`; the per-route breakdown is opt-in —
+ * pass {@see CurrentRouteResolver} (matched router pattern, preferred),
+ * {@see BoundedRouteResolver} around {@see PathRouteResolver} (raw paths, capped),
+ * or {@see PathRouteResolver} where the path space is small and holds no secrets.
  *
  * `$durationBuckets` overrides the histogram's upper bounds (seconds, finite,
  * strictly increasing; `+Inf` is appended) — tune it when your latency profile
@@ -45,7 +52,7 @@ final readonly class RedMetricsMiddleware implements MiddlewareInterface
      */
     public function __construct(
         MetricRegistry $registry,
-        private RouteResolverInterface $routes = new PathRouteResolver(),
+        private RouteResolverInterface $routes = new ConstantRouteResolver(),
         array $durationBuckets = [],
         private array $excludedPaths = [],
     ) {

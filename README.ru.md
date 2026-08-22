@@ -75,6 +75,18 @@ $latency->observe(0.023, new LabelSet(['op' => 'select']));
   (подчёркивания, без точек) — наименьший общий знаменатель, который рендерят оба backend'а.
 - `LabelSet` валидирует имена лейблов (`^[a-zA-Z_]\w*$`) и хранит их в каноническом
   порядке, поэтому равенство не зависит от порядка.
+- `LabelSet::key()` — ключ агрегации. Каждое имя и значение записывается с
+  префиксом длины (`<len>:<bytes>`), поэтому разные наборы лейблов всегда дают
+  разные ключи, даже если значения содержат `=` или `,`. Конкретная строка —
+  внутренняя деталь: сравнивайте наборы через `equals()`, а не по сохранённым
+  где-то строкам `key()`.
+- **Записываемые значения обязаны быть конечными.** `counter->inc()`,
+  `histogram->observe()`, `upDownCounter->add()` и `gauge->inc()/dec()`
+  отклоняют `NAN` и `±INF` через `Exception\InvalidArgumentException`: `NAN`
+  поглощающий, и одна такая запись отравила бы серию на всё время жизни
+  стораджа backend'а. `gauge->set()` — абсолютная запись, поэтому принимает
+  `±INF` (в экспозиции есть токены `+Inf`/`-Inf`), но всё равно отклоняет `NAN`:
+  promphp приводит его к невалидному токену и попутно поднимает PHP-warning.
 
 ### RED middleware
 
@@ -108,27 +120,54 @@ $middleware = new RedMetricsMiddleware($registry, excludedPaths: ['/metrics', '/
 ],
 ```
 
-> **Кардинальность:** лейбл `route` по умолчанию равен сырому пути — новый
-> временной ряд на каждый `/users/123`. В продакшене внедрите router-aware
-> resolver (ниже) либо sanitizing resolver из Prometheus backend'а.
+#### Лейбл `route` — opt-in
 
-Если установлен `yiisoft/router`, `CurrentRouteResolver` резолвит лейбл в
-**паттерн сматченного маршрута** (`/users/{id}`) — низкая кардинальность по
-построению. Несматченные запросы (404, сканеры) сворачиваются в `(unmatched)`,
-если не передать fallback resolver:
+> **Дефолт, который поставляется, вообще не читает URI запроса.** Без настройки
+> лейбл `route` равен константе `(unset)` (`ConstantRouteResolver`). Rate, errors
+> и duration по-прежнему разложены по `method` и `status`; выбрать нужно только
+> разбивку по маршрутам.
+
+Сырой путь не может быть безопасным дефолтом — он контролируется атакующим:
+
+| Риск | Что происходит с сырым путём в `route` |
+|---|---|
+| Кардинальность | по серии на каждый просканированный URL (`/wp-admin/...`, `/.env`, `/users/123`). В общем promphp-сторадже эти серии живут до flush'а: APCu-сегмент забивается, память Redis и время скрейпа растут. |
+| Утечка | `/reset-password/<token>` попадает в `/metrics` как есть — токен видит каждый, кто может прочитать endpoint. |
+
+Выберите один из трёх резолверов, от самого безопасного к наименее:
 
 ```php
-// config/common/di.php — app-side rebind (the core binds PathRouteResolver)
-use Rasuvaeff\Yii3Metrics\CurrentRouteResolver;
-use Rasuvaeff\Yii3Metrics\RouteResolverInterface;
+use Rasuvaeff\Yii3Metrics\{BoundedRouteResolver, CurrentRouteResolver, PathRouteResolver, RouteResolverInterface};
 
-return [
-    RouteResolverInterface::class => CurrentRouteResolver::class,
-];
+// 1. Паттерн сматченного маршрута ('/users/{id}') — низкая кардинальность по
+//    построению. Несматченные запросы (404, сканеры) сворачиваются в
+//    '(unmatched)'. Предпочтительный вариант.
+RouteResolverInterface::class => CurrentRouteResolver::class,
+
+// 2. Сырые пути с жёстким лимитом: первые N различных значений проходят,
+//    остальные становятся '(other)'. Ограничивает число серий, но НЕ прячет
+//    токены из пути.
+RouteResolverInterface::class => static fn (): RouteResolverInterface
+    => new BoundedRouteResolver(new PathRouteResolver(), limit: 100),
+
+// 3. Сырые пути без ограничения — только там, где пространство путей мало и
+//    заведомо не содержит секретов.
+RouteResolverInterface::class => PathRouteResolver::class,
 ```
 
-Помещайте `RedMetricsMiddleware` **до** router middleware — лейбл резолвится
-после отработки обработчика, когда `CurrentRoute` заполнен.
+Лимит варианта 2 действует **на экземпляр резолвера**, а экземпляр живёт в одном
+процессе: на php-fpm каждый воркер узнаёт свой набор различных путей, поэтому
+худший случай — `limit × workers` серий. Это сходящаяся граница, а не
+деплой-глобальная гарантия кардинальности.
+
+Prometheus-backend дополнительно даёт `SanitizingRouteResolver`, который
+схлопывает числовые id и UUID в сыром пути. Он закрывает только случай id —
+произвольные сканерные пути и токены не-UUID-формата остаются уникальными,
+поэтому считайте его уточнением варианта 3, а не заменой вариантам 1–2.
+
+`CurrentRouteResolver` требует `yiisoft/router`. Помещайте `RedMetricsMiddleware`
+**до** router middleware — лейбл резолвится после отработки обработчика, когда
+`CurrentRoute` заполнен.
 
 ### Инспекция метрик в тестах
 
@@ -154,13 +193,16 @@ $snapshots = $provider->snapshots(); // list<MetricSnapshot>, no timestamp
 | `MetricSnapshot` / `MetricSample` | собранное состояние: метрика (name, kind, help) и её сэмплы по каждому набору лейблов |
 | `NullMeterProvider`, `NullMeter`, `NullCounter`, `NullGauge`, `NullUpDownCounter`, `NullHistogram` | no-op backend (config-only по умолчанию; всё равно валидирует структуру) |
 | `InMemoryMeterProvider`, `InMemoryMeter`, `InMemoryCounter`, `InMemoryGauge`, `InMemoryUpDownCounter`, `InMemoryHistogram` | single-process dev/test backend с `snapshots()` |
-| `RedMetricsMiddleware`, `RouteResolverInterface`, `PathRouteResolver` | PSR-15 RED-инструментирование |
+| `RedMetricsMiddleware`, `RouteResolverInterface` | PSR-15 RED-инструментирование |
+| `ConstantRouteResolver` | безопасный дефолт лейбла `route`: константа, никогда не выводится из запроса |
+| `PathRouteResolver`, `BoundedRouteResolver` | opt-in лейбл из сырого пути; bounded-декоратор ограничивает число различных значений |
 | `CurrentRouteResolver` | лейбл маршрута из сматченного паттерна `yiisoft/router` (optional dep) |
+| `Buckets` | общие раскладки бакетов гистограммы (`Buckets::PROMETHEUS_DEFAULTS`, секунды, без хвостового `+Inf`) |
 
 ## Подключение (`yiisoft/config`)
 
 Ядро `config/di.php` биндит фасад (`MetricRegistry`) и `RouteResolverInterface`
-по умолчанию. Оно никогда не биндит `MeterProviderInterface` — этот сменный ключ
+по умолчанию (`ConstantRouteResolver` — см. «Лейбл `route` — opt-in»). Оно никогда не биндит `MeterProviderInterface` — этот сменный ключ
 принадлежит ровно одному источнику:
 
 ```php
@@ -180,7 +222,12 @@ return [
 
 - Имена лейблов валидируются; **значения** лейблов произвольны — не кладите
   high-cardinality или чувствительные значения (id, токены) в лейблы.
-- RED-лейбл `route` по умолчанию равен пути; санизируйте его в продакшене.
+- RED-лейбл `route` — **opt-in**: поставляемый дефолт равен константе `(unset)`
+  именно для того, чтобы контролируемый атакующим путь не плодил серии и не
+  уносил одноразовый токен в `/metrics`. См. «Лейбл `route` — opt-in» перед
+  включением лейбла из пути.
+- Endpoint экспозиции не имеет собственного контроля доступа — закрывайте
+  `/metrics` на уровне edge/роутера.
 
 ## Примеры
 

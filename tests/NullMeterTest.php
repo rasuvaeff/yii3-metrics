@@ -14,6 +14,7 @@ use Rasuvaeff\Yii3Metrics\NullMeterProvider;
 use Rasuvaeff\Yii3Metrics\NullUpDownCounter;
 use Testo\Assert;
 use Testo\Codecov\Covers;
+use Testo\Data\DataProvider;
 use Testo\Test;
 
 #[Test]
@@ -67,6 +68,50 @@ final class NullMeterTest
         NullCounter::instance()->inc(-1.0);
 
         Assert::true(actual: true);
+    }
+
+    /**
+     * Whether metrics are enabled or disabled must not change what input is
+     * accepted: a disabled stack that silently swallowed a `NAN` the enabled
+     * one rejects would hide the failure until the backend is switched on.
+     */
+    #[DataProvider('nonFiniteRecordingCallsProvider')]
+    public function nullRecordingStillRejectsNonFiniteAmounts(object $instrument, string $method, float $amount): void
+    {
+        try {
+            $instrument->{$method}($amount);
+            Assert::fail('expected an InvalidArgumentException for a non-finite amount');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('finite');
+        }
+    }
+
+    public static function nonFiniteRecordingCallsProvider(): iterable
+    {
+        yield 'counter inc NAN' => [NullCounter::instance(), 'inc', NAN];
+
+        yield 'counter inc INF' => [NullCounter::instance(), 'inc', INF];
+
+        yield 'gauge inc NAN' => [NullGauge::instance(), 'inc', NAN];
+
+        yield 'gauge dec INF' => [NullGauge::instance(), 'dec', INF];
+
+        yield 'up-down add NAN' => [NullUpDownCounter::instance(), 'add', NAN];
+
+        yield 'histogram observe INF' => [NullHistogram::instance(), 'observe', INF];
+    }
+
+    public function nullGaugeSetAllowsInfinityAndRejectsNan(): void
+    {
+        NullGauge::instance()->set(INF);
+        NullGauge::instance()->set(-INF);
+
+        try {
+            NullGauge::instance()->set(NAN);
+            Assert::fail('expected an InvalidArgumentException for NaN');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('must not be NaN');
+        }
     }
 
     public function stillValidatesMetricNameAndBuckets(): void

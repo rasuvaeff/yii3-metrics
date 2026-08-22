@@ -74,6 +74,18 @@ single-process convenience) would restart from the process-local value.
   (underscores, no dots) — the lowest common denominator both backends render.
 - `LabelSet` validates label names (`^[a-zA-Z_]\w*$`) and stores them in canonical
   order, so equality is order-independent.
+- `LabelSet::key()` is the aggregation key. Every name and value is
+  length-prefixed (`<len>:<bytes>`), so distinct label sets always get distinct
+  keys even when values contain `=` or `,`. The exact string is an internal
+  detail — compare label sets with `equals()`, not with `key()` strings you
+  stored elsewhere.
+- **Recorded amounts must be finite.** `counter->inc()`, `histogram->observe()`,
+  `upDownCounter->add()` and `gauge->inc()/dec()` reject `NAN` and `±INF` with
+  `Exception\InvalidArgumentException`: `NAN` is absorbing, so one such recording
+  would poison a series for as long as the backend storage lives. `gauge->set()`
+  is an absolute write, so it accepts `±INF` (the exposition has `+Inf`/`-Inf`
+  tokens) but still rejects `NAN`, which promphp coerces to an invalid token
+  while raising a PHP warning.
 
 ### RED middleware
 
@@ -107,27 +119,51 @@ With `yiisoft/config` wiring, both come from the package params instead:
 ],
 ```
 
-> **Cardinality:** the `route` label defaults to the raw path — a new time series
-> per `/users/123`. In production inject the router-aware resolver (below) or a
-> sanitizing one from the Prometheus backend.
+#### The `route` label is opt-in
 
-With `yiisoft/router` installed, `CurrentRouteResolver` resolves the label to the
-**matched route pattern** (`/users/{id}`) — low-cardinality by construction.
-Unmatched requests (404, scanners) collapse to `(unmatched)` unless you pass a
-fallback resolver:
+> **The shipped default never reads the request URI.** Without configuration the
+> `route` label is the constant `(unset)` (`ConstantRouteResolver`). Rate, errors
+> and duration are still broken down by `method` and `status`; only the per-route
+> breakdown has to be chosen.
+
+A raw path cannot be a safe default, because it is attacker-controlled:
+
+| Risk | What happens with a raw-path `route` |
+|---|---|
+| Cardinality | one series per scanned URL (`/wp-admin/...`, `/.env`, `/users/123`). In a shared promphp storage those series live until a flush: the APCu segment fills, Redis memory and scrape time grow. |
+| Disclosure | `/reset-password/<token>` reaches `/metrics` verbatim, so everyone who can scrape the endpoint reads the token. |
+
+Pick one of three resolvers, most to least safe:
 
 ```php
-// config/common/di.php — app-side rebind (the core binds PathRouteResolver)
-use Rasuvaeff\Yii3Metrics\CurrentRouteResolver;
-use Rasuvaeff\Yii3Metrics\RouteResolverInterface;
+use Rasuvaeff\Yii3Metrics\{BoundedRouteResolver, CurrentRouteResolver, PathRouteResolver, RouteResolverInterface};
 
-return [
-    RouteResolverInterface::class => CurrentRouteResolver::class,
-];
+// 1. Matched router pattern ('/users/{id}'), low-cardinality by construction.
+//    Unmatched requests (404, scanners) collapse to '(unmatched)'. Preferred.
+RouteResolverInterface::class => CurrentRouteResolver::class,
+
+// 2. Raw paths with a hard cap: the first N distinct values pass, the rest
+//    become '(other)'. Bounds the series count; does NOT hide path tokens.
+RouteResolverInterface::class => static fn (): RouteResolverInterface
+    => new BoundedRouteResolver(new PathRouteResolver(), limit: 100),
+
+// 3. Raw paths, unbounded — only where the path space is small and secret-free.
+RouteResolverInterface::class => PathRouteResolver::class,
 ```
 
-Place `RedMetricsMiddleware` **before** the router middleware — the label is
-resolved after the handler ran, when `CurrentRoute` is populated.
+Option 2's cap is **per resolver instance**, and an instance lives in one
+process: on php-fpm every worker learns its own set of distinct paths, so the
+worst case is `limit × workers` series. That is a converging bound, not a
+deployment-wide cardinality guarantee.
+
+The Prometheus backend additionally ships `SanitizingRouteResolver`, which
+collapses numeric ids and UUIDs in a raw path. It narrows the id case only —
+arbitrary scanner paths and non-UUID tokens stay unique, so treat it as a
+refinement of option 3, not a replacement for options 1–2.
+
+`CurrentRouteResolver` needs `yiisoft/router`. Place `RedMetricsMiddleware`
+**before** the router middleware — the label is resolved after the handler ran,
+when `CurrentRoute` is populated.
 
 ### Inspecting metrics in tests
 
@@ -153,13 +189,17 @@ $snapshots = $provider->snapshots(); // list<MetricSnapshot>, no timestamp
 | `MetricSnapshot` / `MetricSample` | collected state: a metric (name, kind, help) and its per-label-set samples |
 | `NullMeterProvider`, `NullMeter`, `NullCounter`, `NullGauge`, `NullUpDownCounter`, `NullHistogram` | no-op backend (config-only default; still validates structure) |
 | `InMemoryMeterProvider`, `InMemoryMeter`, `InMemoryCounter`, `InMemoryGauge`, `InMemoryUpDownCounter`, `InMemoryHistogram` | single-process dev/test backend with `snapshots()` |
-| `RedMetricsMiddleware`, `RouteResolverInterface`, `PathRouteResolver` | PSR-15 RED instrumentation |
+| `RedMetricsMiddleware`, `RouteResolverInterface` | PSR-15 RED instrumentation |
+| `ConstantRouteResolver` | safe default `route` label: a constant, never derived from the request |
+| `PathRouteResolver`, `BoundedRouteResolver` | opt-in raw-path label; the bounded decorator caps how many distinct values are ever emitted |
 | `CurrentRouteResolver` | route label from the matched `yiisoft/router` pattern (optional dep) |
+| `Buckets` | shared histogram bucket layouts (`Buckets::PROMETHEUS_DEFAULTS`, seconds, no trailing `+Inf`) |
 
 ## Wiring (`yiisoft/config`)
 
 The core `config/di.php` binds the facade (`MetricRegistry`) and the default
-`RouteResolverInterface`. It never binds `MeterProviderInterface` — that swappable
+`RouteResolverInterface` (`ConstantRouteResolver` — see "The `route` label is
+opt-in"). It never binds `MeterProviderInterface` — that swappable
 key is owned by exactly one source:
 
 ```php
@@ -179,7 +219,12 @@ is a deliberate `yiisoft/config` `Duplicate key` error.
 
 - Label names are validated; label **values** are arbitrary — keep
   high-cardinality or sensitive values (ids, tokens) out of labels.
-- The RED `route` label defaults to the path; sanitize it in production.
+- The RED `route` label is **opt-in**: the shipped default is the constant
+  `(unset)`, precisely so an attacker-controlled path cannot mint series or carry
+  a single-use token into `/metrics`. See "The `route` label is opt-in" before
+  enabling a path-derived label.
+- The exposition endpoint has no access control of its own — close `/metrics` at
+  the edge/router.
 
 ## Examples
 

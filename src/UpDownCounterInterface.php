@@ -14,6 +14,10 @@ namespace Rasuvaeff\Yii3Metrics;
  * Rule of thumb: measured absolute value → gauge `set()`; counted ups and downs
  * → up-down counter `add()`.
  *
+ * `$delta` must be finite: a recording implementation rejects `NAN` and `±INF`
+ * with an `Exception\InvalidArgumentException`, because they would poison the
+ * accumulated value irreversibly.
+ *
  * @api
  */
 interface UpDownCounterInterface

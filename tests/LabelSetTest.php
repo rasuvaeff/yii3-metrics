@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rasuvaeff\Yii3Metrics\Tests;
 
 use Rasuvaeff\PropertyTesting\ArbitraryInterface;
+use Rasuvaeff\PropertyTesting\Classify;
 use Rasuvaeff\PropertyTesting\Gen;
 use Rasuvaeff\PropertyTesting\Property;
 use Rasuvaeff\Yii3Metrics\Exception\InvalidArgumentException;
@@ -25,7 +26,7 @@ final class LabelSetTest
 
         Assert::same($set->labels, ['code' => '200', 'method' => 'GET']); // sorted
         Assert::same($set->names(), ['code', 'method']);
-        Assert::same($set->key(), 'code=200,method=GET');
+        Assert::same($set->key(), '4:code=3:200,6:method=3:GET');
         Assert::false($set->isEmpty());
     }
 
@@ -92,5 +93,105 @@ final class LabelSetTest
                 static fn(array $chars): string => 'k' . implode('', $chars),
             ),
         ];
+    }
+
+    /**
+     * Two-sided: the alphabet mixes characters that are legal in a label name
+     * with ones that are not, so the generator produces accepted AND rejected
+     * strings without an `Assume`. The property is that acceptance agrees with
+     * the documented pattern in both directions — a one-sided "valid names are
+     * accepted" property cannot see a validator that accepts too much.
+     */
+    #[Property(runs: 300, timeoutMs: 1000)]
+    public function labelNameAcceptanceMatchesThePattern(string $name): void
+    {
+        $accepted = true;
+
+        try {
+            new LabelSet([$name => 'v']);
+        } catch (InvalidArgumentException) {
+            $accepted = false;
+        }
+
+        Classify::cover($accepted, 'accepted name', 15.0);
+        Classify::cover(!$accepted, 'rejected name', 15.0);
+
+        Assert::same($accepted, $name !== '' && preg_match('/^[a-zA-Z_]\w*\z/', $name) === 1);
+    }
+
+    /** @return array<string, ArbitraryInterface> */
+    public static function labelNameAcceptanceMatchesThePatternGenerators(): array
+    {
+        return ['name' => Gen::stringFrom('aZ_09-.', 0, 4)];
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function labelNameAcceptanceMatchesThePatternExamples(): iterable
+    {
+        yield 'empty' => [''];
+        yield 'leading digit' => ['1abc'];
+        yield 'hyphen' => ['a-b'];
+        yield 'dot' => ['a.b'];
+        // `$` would match here; the pattern is anchored with `\z` on purpose.
+        yield 'trailing newline' => ["abc\n"];
+        yield 'leading underscore' => ['_ok'];
+        yield 'digits after a letter' => ['a09'];
+    }
+
+    /**
+     * The exact pair from the review: with the old `name=value,…` join both sets
+     * rendered as `a=1,b=2,b=3`, so every consumer that aggregates by `key()`
+     * merged two unrelated series into one.
+     */
+    public function keySeparatesSetsWhoseValuesContainTheDelimiters(): void
+    {
+        $left = new LabelSet(['a' => '1,b=2', 'b' => '3']);
+        $right = new LabelSet(['a' => '1', 'b' => '2,b=3']);
+
+        Assert::false($left->equals($right));
+        Assert::same($left->key(), '1:a=5:1,b=2,1:b=1:3');
+        Assert::same($right->key(), '1:a=1:1,1:b=5:2,b=3');
+    }
+
+    /**
+     * Injectivity in both directions: equal keys iff equal label sets. The value
+     * alphabet deliberately contains `=` and `,`, the two characters the old key
+     * format could not distinguish from its own separators.
+     *
+     * @param array<string, string> $left
+     * @param array<string, string> $right
+     */
+    #[Property(runs: 400)]
+    public function keyIsInjective(array $left, array $right): void
+    {
+        $a = new LabelSet($left);
+        $b = new LabelSet($right);
+
+        $equal = $a->equals($b);
+
+        Classify::cover($equal, 'equal label sets', 2.0);
+        Classify::cover(!$equal, 'distinct label sets', 50.0);
+        Classify::when($a->isEmpty() || $b->isEmpty(), 'empty operand');
+
+        Assert::same($a->key() === $b->key(), $equal);
+    }
+
+    /** @return array<string, ArbitraryInterface> */
+    public static function keyIsInjectiveGenerators(): array
+    {
+        $set = Gen::dictOf(Gen::elements(['a', 'b']), Gen::stringFrom('1,=', 0, 2), 0, 2);
+
+        return ['left' => $set, 'right' => $set];
+    }
+
+    /** @return iterable<string, array{array<string, string>, array<string, string>}> */
+    public static function keyIsInjectiveExamples(): iterable
+    {
+        yield 'review collision pair' => [['a' => '1,b=2', 'b' => '3'], ['a' => '1', 'b' => '2,b=3']];
+        yield 'value is a whole pair' => [['a' => '', 'b' => ''], ['a' => '1:b=']];
+        yield 'delimiter-only values' => [['a' => ','], ['a' => '=']];
+        yield 'length prefix inside the value' => [['a' => '1:b'], ['a' => '1', 'b' => '']];
+        yield 'both empty' => [[], []];
+        yield 'identical non-empty' => [['a' => 'x=y,z'], ['a' => 'x=y,z']];
     }
 }

@@ -7,14 +7,24 @@ use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Rasuvaeff\Yii3Metrics\BoundedRouteResolver;
 use Rasuvaeff\Yii3Metrics\InMemoryMeterProvider;
 use Rasuvaeff\Yii3Metrics\MetricRegistry;
+use Rasuvaeff\Yii3Metrics\PathRouteResolver;
 use Rasuvaeff\Yii3Metrics\RedMetricsMiddleware;
 
 require __DIR__ . '/../vendor/autoload.php';
 
 $provider = new InMemoryMeterProvider();
-$middleware = new RedMetricsMiddleware(new MetricRegistry($provider));
+
+// Without a resolver the `route` label is the constant `(unset)`: the shipped
+// default never reads the URI, because a raw path both explodes the series count
+// and copies path tokens into the exposition. Here we opt into raw paths and cap
+// how many distinct ones may ever be emitted.
+$middleware = new RedMetricsMiddleware(
+    new MetricRegistry($provider),
+    new BoundedRouteResolver(new PathRouteResolver(), limit: 50),
+);
 
 $handler = new readonly class implements RequestHandlerInterface {
     #[\Override]

@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3Metrics\Internal;
 
+use Rasuvaeff\Yii3Metrics\Buckets;
 use Rasuvaeff\Yii3Metrics\Exception\InvalidArgumentException;
 
 /**
- * Shared structural validation for metric registration — applied by every meter
- * (including the no-op one) so a bad name or bucket layout fails fast rather than
- * only when a recording backend is enabled.
+ * Shared structural validation for metric registration and recording — applied by
+ * every meter (including the no-op one) so a bad name, bucket layout or
+ * non-finite amount fails fast rather than only when a recording backend is
+ * enabled.
  *
  * @internal
  */
@@ -17,9 +19,6 @@ final class Validation
 {
     /** Prometheus metric-name grammar (allows `:`, no dots). */
     private const string NAME_PATTERN = '/^[a-zA-Z_:][a-zA-Z0-9_:]*\z/';
-
-    /** @var list<float> Prometheus default histogram bounds (seconds). */
-    public const array DEFAULT_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
 
     private function __construct() {}
 
@@ -31,8 +30,35 @@ final class Validation
     }
 
     /**
+     * Rejects `NAN` and `±INF` before they reach an accumulator. `NAN` is
+     * absorbing (`NAN + x === NAN`), so a single non-finite recording poisons a
+     * series for as long as the backend storage lives; `NAN` also fails every
+     * bucket comparison, breaking the `count == bucket{le="+Inf"}` invariant.
+     */
+    public static function finiteAmount(float $amount): void
+    {
+        if (!is_finite($amount)) {
+            throw new InvalidArgumentException('Metric amount must be finite');
+        }
+    }
+
+    /**
+     * Rejects `NAN` where `±INF` is still representable — a gauge's absolute
+     * `set()`. `NAN` is not: promphp coerces it to the token `NAN` (the exposition
+     * format spells it `NaN`) and PHP raises a warning while doing so, which under
+     * `yiisoft/error-handler` turns the `/metrics` render into a 500. `±INF` has a
+     * defined token (`+Inf` / `-Inf`) on both backends.
+     */
+    public static function notNan(float $value): void
+    {
+        if (is_nan($value)) {
+            throw new InvalidArgumentException('Metric value must not be NaN');
+        }
+    }
+
+    /**
      * Validates finite bounds are strictly increasing and appends the implicit
-     * `+Inf` bucket. Empty input falls back to {@see DEFAULT_BUCKETS}.
+     * `+Inf` bucket. Empty input falls back to {@see Buckets::PROMETHEUS_DEFAULTS}.
      *
      * @param list<float> $bounds
      *
@@ -41,7 +67,7 @@ final class Validation
     public static function histogramBuckets(array $bounds): array
     {
         if ($bounds === []) {
-            $bounds = self::DEFAULT_BUCKETS;
+            $bounds = Buckets::PROMETHEUS_DEFAULTS;
         }
 
         $previous = -INF;

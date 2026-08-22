@@ -19,13 +19,14 @@ Public API: `MetricRegistry` (facade), `MeterProviderInterface`, `MeterInterface
 `HistogramInterface`, `LabelSet`,
 `MetricKind`, `MetricSnapshot`, `MetricSample`, `Null*` and `InMemory*`
 (meter/provider/counter/gauge/histogram), `RedMetricsMiddleware`,
-`RouteResolverInterface`, `PathRouteResolver`, `CurrentRouteResolver`,
+`RouteResolverInterface`, `ConstantRouteResolver`, `PathRouteResolver`,
+`BoundedRouteResolver`, `CurrentRouteResolver`, `Buckets`,
 `Exception\InvalidArgumentException`.
 
 ## DI wiring (core+backend)
 
 `config/di.php` binds the facade (`MetricRegistry`) and the default
-`RouteResolverInterface => PathRouteResolver`. It must **never** bind
+`RouteResolverInterface => ConstantRouteResolver`. It must **never** bind
 `MeterProviderInterface` — that swappable key is owned by exactly one backend or
 the app (`MeterProviderInterface => NullMeterProvider`). Binding it twice is a
 `yiisoft/config` `Duplicate key` error, by design. `config/di-web.php` binds
@@ -45,8 +46,19 @@ the app (`MeterProviderInterface => NullMeterProvider`). Binding it twice is a
    - **Structural validation always** (even in `NullMeter`): metric-name regex
      (`^[a-zA-Z_:][a-zA-Z0-9_:]*$`, Prometheus — no dots) and histogram bucket
      monotonicity; `LabelSet` validates label-name format in its constructor.
-   - **Recording checks only in recording impls** (`InMemory*`, backends), NOT
-     `Null*`: a counter rejects a negative increment.
+   - **Non-finite guards in EVERY impl, `Null*` included**: every accumulating
+     write (`inc`/`observe`/`add`/gauge `inc`/`dec`) rejects `NAN`/`±INF` via
+     `Validation::finiteAmount()`, and gauge `set()` allows `±INF` but rejects
+     `NAN` (`Validation::notNan()`) — promphp coerces `NAN` to an invalid
+     exposition token and raises a PHP warning doing it. Whether metrics are
+     enabled or disabled must not change what input is accepted: a disabled
+     stack that silently swallows a recording the enabled one would reject
+     hides the failure until the backend is switched on. Any new backend must
+     copy both guards; a backend without them makes `NAN` behave differently
+     per backend, which is the bug they were added for.
+   - **Recording-impl-only checks stay out of `Null*`**: the counter's
+     negative-increment rejection is a recording-impl concern — `NullCounter`
+     accepts it.
    - **Gauge vs UpDownCounter**: gauge = measured absolute (`set()`);
      up-down counter = counted deltas (`add(±δ)`, no set) — the fpm-safe choice
      for counted values. Backends map it to promphp gauge (`incBy`) / OTel
@@ -76,10 +88,23 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
   common denominator both backends render. RED metrics are
   `http_server_requests_total` / `http_server_request_duration_seconds`, NOT the
   dotted names in the plan (which contradict the name regex).
-- **RED `route` label is a cardinality footgun.** The default `PathRouteResolver`
-  uses the raw path (a series per `/users/123`). In production the app rebinds
-  `RouteResolverInterface => CurrentRouteResolver` (matched `yiisoft/router`
-  pattern) or the Prometheus backend's `SanitizingRouteResolver`.
+- **RED `route` label is opt-in, and the default must stay request-independent.**
+  `ConstantRouteResolver` (`(unset)`) is the DI and middleware default: a raw
+  path is attacker-controlled, so as a default it both explodes cardinality and
+  copies path tokens (`/reset-password/<token>`) into `/metrics`. Never restore a
+  URI-reading default. Applications opt in by rebinding
+  `RouteResolverInterface` to `CurrentRouteResolver` (matched `yiisoft/router`
+  pattern), `BoundedRouteResolver` around `PathRouteResolver` (capped raw
+  paths — the cap is per resolver instance, i.e. per process; the global bound
+  on fpm is `limit × workers`, not a deployment-wide guarantee),
+  `PathRouteResolver`, or the Prometheus backend's `SanitizingRouteResolver`.
+- **`LabelSet::key()` must stay injective.** Values are untrusted strings that can
+  contain the separators, so every name and value is length-prefixed. A plain
+  `name=value` join merged distinct series into one; do not "simplify" it back.
+- **`Buckets::PROMETHEUS_DEFAULTS` carries NO trailing `+Inf`.** Backends append
+  (or model) the overflow bucket themselves; `Validation::histogramBuckets()`
+  appends it for the in-memory path. Passing the already-`INF`-terminated list to
+  a backend is a silently wrong schema.
 - **`CurrentRouteResolver` is an optional-dep class** (`yiisoft/router` in
   `suggest` + `require-dev`, symbol whitelisted in `composer-require-checker.json`
   — do not delete that file). It must NOT be bound in the core `di.php` — the
