@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3Metrics;
 
+use Rasuvaeff\Yii3Metrics\Internal\Validation;
+
 /**
  * Single-process histogram for tests and dev. Buckets are cumulative (`le`): an
  * observation increments every bucket whose bound is >= the value, plus the
- * running count and sum.
+ * running count and sum. A non-finite observation is rejected: `NAN` fails every
+ * bucket comparison (including `NAN <= INF`), which would break the
+ * `count == bucket{le="+Inf"}` invariant.
  *
  * @api
  */
@@ -31,6 +35,8 @@ final class InMemoryHistogram implements HistogramInterface
     #[\Override]
     public function observe(float $value, LabelSet $labels = new LabelSet()): void
     {
+        Validation::finiteAmount($value);
+
         $key = $labels->key();
 
         if (!isset($this->data[$key])) {

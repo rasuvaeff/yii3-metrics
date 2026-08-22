@@ -9,6 +9,8 @@ use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Rasuvaeff\Yii3Metrics\BoundedRouteResolver;
+use Rasuvaeff\Yii3Metrics\ConstantRouteResolver;
 use Rasuvaeff\Yii3Metrics\InMemoryMeterProvider;
 use Rasuvaeff\Yii3Metrics\MetricKind;
 use Rasuvaeff\Yii3Metrics\MetricRegistry;
@@ -24,6 +26,8 @@ use Testo\Test;
 #[Test]
 #[Covers(RedMetricsMiddleware::class)]
 #[Covers(PathRouteResolver::class)]
+#[Covers(ConstantRouteResolver::class)]
+#[Covers(BoundedRouteResolver::class)]
 final class RedMetricsMiddlewareTest
 {
     private InMemoryMeterProvider $provider;
@@ -49,7 +53,7 @@ final class RedMetricsMiddlewareTest
         Assert::same($requests->samples[0]->value, 1.0);
         Assert::same($requests->samples[0]->labels->labels, [
             'method' => 'GET',
-            'route' => '/users',
+            'route' => '(unset)', // the shipped default never reads the URI
             'status' => '200',
         ]);
 
@@ -99,6 +103,63 @@ final class RedMetricsMiddlewareTest
         $middleware->process($this->factory->createServerRequest('GET', 'https://x/users/123'), $this->handler(200));
 
         Assert::same($this->snapshot('http_server_requests_total')->samples[0]->labels->labels['route'], '/users/{id}');
+    }
+
+    /**
+     * Regression for the default `route` label. A raw path used to be the shipped
+     * default, so a single-use token in the URL reached the exposition and every
+     * scanned URL became its own series. Neither may happen without the
+     * application choosing a resolver.
+     */
+    public function defaultRouteLabelNeverEchoesTheRequestPath(): void
+    {
+        $middleware = new RedMetricsMiddleware($this->registry);
+
+        $middleware->process(
+            $this->factory->createServerRequest('GET', 'https://x/reset-password/s3cr3t-token'),
+            $this->handler(200),
+        );
+        $middleware->process($this->factory->createServerRequest('GET', 'https://x/.env'), $this->handler(404));
+        $middleware->process($this->factory->createServerRequest('GET', 'https://x/wp-admin'), $this->handler(404));
+
+        $routes = [];
+
+        foreach ($this->snapshot('http_server_requests_total')->samples as $sample) {
+            $routes[] = $sample->labels->labels['route'];
+        }
+
+        Assert::same(array_values(array_unique($routes)), ['(unset)']);
+    }
+
+    public function pathRouteResolverStaysAvailableAsAnExplicitOptIn(): void
+    {
+        $middleware = new RedMetricsMiddleware($this->registry, new PathRouteResolver());
+
+        $middleware->process($this->factory->createServerRequest('GET', 'https://x/users'), $this->handler(200));
+
+        Assert::same($this->snapshot('http_server_requests_total')->samples[0]->labels->labels['route'], '/users');
+    }
+
+    public function boundedResolverCollapsesRoutesPastTheLimit(): void
+    {
+        $middleware = new RedMetricsMiddleware(
+            $this->registry,
+            new BoundedRouteResolver(new PathRouteResolver(), limit: 2),
+        );
+
+        foreach (['/a', '/b', '/c', '/d', '/a'] as $path) {
+            $middleware->process($this->factory->createServerRequest('GET', 'https://x' . $path), $this->handler(200));
+        }
+
+        $counts = [];
+
+        foreach ($this->snapshot('http_server_requests_total')->samples as $sample) {
+            $counts[$sample->labels->labels['route']] = $sample->value;
+        }
+
+        ksort($counts);
+
+        Assert::same($counts, ['(other)' => 2.0, '/a' => 2.0, '/b' => 1.0]);
     }
 
     public function customDurationBucketsReachTheHistogram(): void

@@ -20,6 +20,9 @@ bind `MeterProviderInterface => NullMeterProvider`.
   dots). Label names `^[a-zA-Z_]\w*$` (validated by `LabelSet`).
 - A meter keeps per-name accumulating state — `counter('x')` twice → same
   series. A counter rejects `inc()` with a negative amount.
+- Recorded amounts MUST be finite: `counter->inc`, `histogram->observe`,
+  `upDownCounter->add`, `gauge->inc|dec` throw on `NAN`/`±INF`. `gauge->set` is
+  absolute: `±INF` ok, `NAN` throws (no renderable token).
 - Gauge = measured absolute value (`set()`); UpDownCounter = counted ups/downs
   (`add(±δ)`) — prefer it for counted values: deltas aggregate correctly across
   php-fpm workers, gauge inc/dec tallies are process-local.
@@ -29,8 +32,12 @@ bind `MeterProviderInterface => NullMeterProvider`.
   NEVER bind `MeterProviderInterface` in core (one backend/app owns it, else
   `yiisoft/config` Duplicate key).
 - Histograms are cumulative (`le`); `+Inf` appended implicitly.
-- RED `route` label defaults to path (cardinality footgun) — inject a
+- RED `route` label defaults to the CONSTANT `(unset)` (`ConstantRouteResolver`):
+  the shipped default never reads the URI (raw path = cardinality explosion +
+  token leak into `/metrics`). A path-derived label is opt-in — rebind
   `RouteResolverInterface`. Duration via `hrtime` (no telemetry dependency).
+- `Buckets::PROMETHEUS_DEFAULTS` — public default histogram bounds (seconds,
+  finite, NO trailing `+Inf`); backends append their own overflow bucket.
 
 ## API
 
@@ -75,7 +82,7 @@ $p->snapshots();                                 // list<MetricSnapshot> (no tim
 ```php
 use Rasuvaeff\Yii3Metrics\{RedMetricsMiddleware, RouteResolverInterface};
 
-new RedMetricsMiddleware($registry);                 // default PathRouteResolver
+new RedMetricsMiddleware($registry);                 // route = '(unset)' (safe default)
 new RedMetricsMiddleware($registry, $routeResolver); // custom route label
 new RedMetricsMiddleware($registry, durationBuckets: [0.1, 1.0, 10.0]); // custom histogram bounds (s)
 new RedMetricsMiddleware($registry, excludedPaths: ['/metrics']); // skip scrape/probe endpoints (exact paths)
@@ -83,6 +90,19 @@ new RedMetricsMiddleware($registry, excludedPaths: ['/metrics']); // skip scrape
 // records http_server_requests_total{method,route,status}
 //         http_server_request_duration_seconds{method,route,status}
 // status = '500' when the handler throws.
+```
+
+### Route resolvers
+
+```php
+use Rasuvaeff\Yii3Metrics\{BoundedRouteResolver, ConstantRouteResolver, PathRouteResolver};
+
+new ConstantRouteResolver();          // '(unset)' — DI + middleware default, ignores the request
+new ConstantRouteResolver('app');     // custom constant
+new PathRouteResolver();              // opt-in raw path: cardinality + token-leak risk
+new BoundedRouteResolver(new PathRouteResolver(), limit: 100, overflow: '(other)');
+// bounded: first `limit` distinct values pass, the rest collapse to `overflow`;
+// limit < 1 throws. Stateful, per process — bind one shared instance.
 ```
 
 ### CurrentRouteResolver (yiisoft/router, optional dep)
@@ -107,6 +127,8 @@ use Rasuvaeff\Yii3Metrics\LabelSet;
 $l = new LabelSet(['method' => 'GET', 'code' => 200]); // scalar values coerced to string
 $l->labels;   // ['code' => '200', 'method' => 'GET'] (sorted)
 $l->equals($other); $l->key(); $l->names(); $l->isEmpty();
+// key() is length-prefixed ('4:code=3:200,6:method=3:GET') so it is injective
+// even when values contain '=' or ','. Compare sets with equals(), not keys.
 ```
 
 Invalid label names throw `Exception\InvalidArgumentException`.

@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3Metrics;
 
+use Rasuvaeff\Yii3Metrics\Internal\Validation;
+
 /**
- * Single-process up-down counter for tests and dev.
+ * Single-process up-down counter for tests and dev. Rejects a non-finite delta.
  *
  * @api
  */
@@ -25,6 +27,8 @@ final class InMemoryUpDownCounter implements UpDownCounterInterface
     #[\Override]
     public function add(float $delta, LabelSet $labels = new LabelSet()): void
     {
+        Validation::finiteAmount($delta);
+
         $key = $labels->key();
         $this->values[$key] = ($this->values[$key] ?? 0.0) + $delta;
         $this->labelSets[$key] = $labels;

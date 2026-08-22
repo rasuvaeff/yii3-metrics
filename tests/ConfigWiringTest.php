@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3Metrics\Tests;
 
+use Rasuvaeff\Yii3Metrics\ConstantRouteResolver;
 use Rasuvaeff\Yii3Metrics\MeterProviderInterface;
 use Rasuvaeff\Yii3Metrics\MetricRegistry;
 use Rasuvaeff\Yii3Metrics\NullCounter;
@@ -26,6 +27,16 @@ final class ConfigWiringTest
     public function coreBindsTheFacadeAndRouteResolver(): void
     {
         Assert::array($this->di())->hasKeys(MetricRegistry::class, RouteResolverInterface::class);
+    }
+
+    /**
+     * The shipped default must not be a resolver that reads the request: a
+     * raw-path `route` label is attacker-controlled, so it both explodes the
+     * series count and copies path tokens into `/metrics`.
+     */
+    public function defaultRouteResolverIsRequestIndependent(): void
+    {
+        Assert::same($this->di()[RouteResolverInterface::class], ConstantRouteResolver::class);
     }
 
     public function coreDoesNotBindTheSwappableProviderInterface(): void

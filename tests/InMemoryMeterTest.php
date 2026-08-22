@@ -21,6 +21,7 @@ use Rasuvaeff\Yii3Metrics\MetricSample;
 use Rasuvaeff\Yii3Metrics\MetricSnapshot;
 use Testo\Assert;
 use Testo\Codecov\Covers;
+use Testo\Data\DataProvider;
 use Testo\Test;
 
 #[Test]
@@ -215,6 +216,115 @@ final class InMemoryMeterTest
     public function freshProviderHasNoSnapshots(): void
     {
         Assert::same((new InMemoryMeterProvider())->snapshots(), []);
+    }
+
+    /**
+     * Regression: `if ($amount < 0)` is false for `NAN`, so `NAN` and `INF` used
+     * to reach the accumulators. `NAN` is absorbing, so one such recording turned
+     * the series total into `NAN` for good; in a histogram it also incremented
+     * `count` without touching any bucket (`NAN <= INF` is false), breaking the
+     * `count == bucket{le="+Inf"}` invariant.
+     *
+     * @param \Closure(InMemoryMeter, float): void $record
+     */
+    #[DataProvider('nonFiniteRecordingProvider')]
+    public function recordingInstrumentsRejectNonFiniteInput(\Closure $record, float $amount): void
+    {
+        $meter = new InMemoryMeter();
+
+        try {
+            $record($meter, $amount);
+            Assert::fail('expected an InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('must be finite');
+        }
+    }
+
+    public static function nonFiniteRecordingProvider(): iterable
+    {
+        $instruments = [
+            'counter inc' => static fn(InMemoryMeter $m, float $v): mixed => $m->counter('c')->inc($v),
+            'histogram observe' => static fn(InMemoryMeter $m, float $v): mixed => $m->histogram('h')->observe($v),
+            'up-down add' => static fn(InMemoryMeter $m, float $v): mixed => $m->upDownCounter('u')->add($v),
+            'gauge inc' => static fn(InMemoryMeter $m, float $v): mixed => $m->gauge('g')->inc($v),
+            'gauge dec' => static fn(InMemoryMeter $m, float $v): mixed => $m->gauge('g')->dec($v),
+        ];
+
+        foreach ($instruments as $label => $record) {
+            yield $label . ' rejects NAN' => [$record, NAN];
+            yield $label . ' rejects +INF' => [$record, INF];
+            yield $label . ' rejects -INF' => [$record, -INF];
+        }
+    }
+
+    /**
+     * `set()` is an absolute write, not an accumulation, so `±INF` is harmless and
+     * both backends have a token for it (`+Inf` / `-Inf`). `NAN` has none —
+     * promphp coerces it to the invalid token `NAN` and raises a PHP warning
+     * while rendering, which `yiisoft/error-handler` turns into a 500 on
+     * `/metrics`.
+     */
+    public function gaugeSetAcceptsInfinityButNotNan(): void
+    {
+        $meter = new InMemoryMeter();
+        $meter->gauge('g')->set(INF);
+
+        Assert::same($meter->snapshots()[0]->samples[0]->value, INF);
+
+        $meter->gauge('g')->set(-INF);
+
+        Assert::same($meter->snapshots()[0]->samples[0]->value, -INF);
+
+        try {
+            $meter->gauge('g')->set(NAN);
+            Assert::fail('expected an InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('must not be NaN');
+        }
+    }
+
+    /**
+     * The invariant the `NAN` observation used to break, stated directly: the
+     * cumulative `+Inf` bucket always equals the observation count.
+     *
+     * @param list<float> $values
+     */
+    #[Property(runs: 200)]
+    public function histogramCountAlwaysEqualsTheInfiniteBucket(array $values): void
+    {
+        $meter = new InMemoryMeter();
+        $histogram = $meter->histogram('h', buckets: [0.1, 1.0]);
+
+        foreach ($values as $value) {
+            $histogram->observe($value);
+        }
+
+        if ($values === []) {
+            Assert::same($meter->snapshots()[0]->samples, []);
+
+            return;
+        }
+
+        $sample = $meter->snapshots()[0]->samples[0];
+
+        Classify::cover(\count($values) > 4, 'several observations', 20.0);
+        Classify::when($sample->value === 1.0, 'a single observation');
+
+        Assert::same($sample->buckets['+Inf'], $sample->value);
+    }
+
+    /** @return array<string, ArbitraryInterface> */
+    public static function histogramCountAlwaysEqualsTheInfiniteBucketGenerators(): array
+    {
+        return ['values' => Gen::arrayOf(Gen::floatBetween(-5.0, 5.0), 0, 10)];
+    }
+
+    /** @return iterable<string, array{list<float>}> */
+    public static function histogramCountAlwaysEqualsTheInfiniteBucketExamples(): iterable
+    {
+        yield 'no observations' => [[]];
+        yield 'exactly the bounds' => [[0.1, 1.0]];
+        yield 'all past the last finite bound' => [[2.0, 3.0, 4.0]];
     }
 
     #[Property(runs: 200)]
