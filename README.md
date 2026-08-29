@@ -183,7 +183,7 @@ $snapshots = $provider->snapshots(); // list<MetricSnapshot>, no timestamp
 | Type | Role |
 |---|---|
 | `MetricRegistry` | facade: `counter/gauge/upDownCounter/histogram(name, help, labelNames, buckets)` |
-| `MeterProviderInterface` / `MeterInterface` | swappable backend entry point; a meter creates and memoizes instruments |
+| `MeterProviderInterface` / `MeterInterface` | swappable backend entry point; a meter creates and memoizes instruments. `getMeter($name)`'s `$name` is an instrumentation scope for diagnostics — metric state is global per `(kind, name)`, a provider MAY return the same meter for every name |
 | `CounterInterface` / `GaugeInterface` / `UpDownCounterInterface` / `HistogramInterface` | instrument contracts |
 | `LabelSet` / `MetricKind` | validated label pairs / instrument kind enum (`Counter`, `Gauge`, `UpDownCounter`, `Histogram`) |
 | `MetricSnapshot` / `MetricSample` | collected state: a metric (name, kind, help) and its per-label-set samples |
@@ -194,6 +194,7 @@ $snapshots = $provider->snapshots(); // list<MetricSnapshot>, no timestamp
 | `PathRouteResolver`, `BoundedRouteResolver` | opt-in raw-path label; the bounded decorator caps how many distinct values are ever emitted |
 | `CurrentRouteResolver` | route label from the matched `yiisoft/router` pattern (optional dep) |
 | `Buckets` | shared histogram bucket layouts (`Buckets::PROMETHEUS_DEFAULTS`, seconds, no trailing `+Inf`) |
+| `Internal\Validation` | stable validation for the backend family: metric-name grammar, finite amounts, histogram bucket layout — every meter and first-party backend applies the same checks |
 
 ## Wiring (`yiisoft/config`)
 

@@ -20,6 +20,15 @@ bind `MeterProviderInterface => NullMeterProvider`.
   dots). Label names `^[a-zA-Z_]\w*$` (validated by `LabelSet`).
 - A meter keeps per-name accumulating state — `counter('x')` twice → same
   series. A counter rejects `inc()` with a negative amount.
+- `MeterProviderInterface::getMeter($name)`: `$name` is an instrumentation
+  scope for diagnostics; metric state is global per `(kind, name)` — a provider
+  MAY return the same meter instance for every name.
+- `Internal\Validation` (@api, backend family): metric-name regex, finite
+  amounts, bucket monotonicity — backends call it too, so validation is
+  identical on every backend.
+- On a failed request `RedMetricsMiddleware` swallows recording errors (a
+  throwing resolver/storage must not mask the handler's throwable); on a
+  successful request they propagate.
 - Recorded amounts MUST be finite: `counter->inc`, `histogram->observe`,
   `upDownCounter->add`, `gauge->inc|dec` throw on `NAN`/`±INF`. `gauge->set` is
   absolute: `±INF` ok, `NAN` throws (no renderable token).

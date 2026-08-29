@@ -46,6 +46,10 @@ the app (`MeterProviderInterface => NullMeterProvider`). Binding it twice is a
    - **Structural validation always** (even in `NullMeter`): metric-name regex
      (`^[a-zA-Z_:][a-zA-Z0-9_:]*$`, Prometheus — no dots) and histogram bucket
      monotonicity; `LabelSet` validates label-name format in its constructor.
+     `Internal\Validation` is `@api` and family-stable: the first-party
+     backends call the same checks, so validation cannot drift per backend
+     (promphp's own name regex anchors with `$` and accepts a trailing
+     newline the core rejects).
    - **Non-finite guards in EVERY impl, `Null*` included**: every accumulating
      write (`inc`/`observe`/`add`/gauge `inc`/`dec`) rejects `NAN`/`±INF` via
      `Validation::finiteAmount()`, and gauge `set()` allows `±INF` but rejects
@@ -109,8 +113,12 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
   `suggest` + `require-dev`, symbol whitelisted in `composer-require-checker.json`
   — do not delete that file). It must NOT be bound in the core `di.php` — the
   container would fatal without `yiisoft/router` installed. `RedMetricsMiddleware`
-  sits BEFORE the router middleware: the label resolves in `finally` after the
-  handler ran, when `CurrentRoute` is populated. Unmatched requests collapse to
+  sits BEFORE the router middleware: the label resolves after the
+  handler ran, when `CurrentRoute` is populated. On a THROWN handler the
+  recording is guarded: a resolver/storage failure there is swallowed — it
+  must not replace the throwable the caller needs to see — while on a
+  successful request the same failure propagates. Do not "simplify" the two
+  paths back into one `finally`. Unmatched requests collapse to
   `(unmatched)` by default (scanner traffic must not mint series); an injected
   fallback resolver overrides that. `yiisoft/dummy-provider` satisfies the
   `yiisoft/router-implementation` virtual package in `require-dev`.

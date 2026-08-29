@@ -72,23 +72,38 @@ final readonly class RedMetricsMiddleware implements MiddlewareInterface
             return $handler->handle($request);
         }
 
-        $start = hrtime(as_number: true);
-        $status = self::STATUS_ON_THROW;
+        $start = (float) hrtime(as_number: true);
 
         try {
             $response = $handler->handle($request);
-            $status = (string) $response->getStatusCode();
+        } catch (\Throwable $throwable) {
+            // A recording failure here (a route resolver or a storage blowing
+            // up) used to replace the throwable the caller actually needs to
+            // see — the root cause of the request disappeared behind a
+            // metrics-side error. The handler failure outranks it.
+            try {
+                $this->record($request, self::STATUS_ON_THROW, $start);
+            } catch (\Throwable) {
+                // deliberately swallowed — see above
+            }
 
-            return $response;
-        } finally {
-            $labels = new LabelSet([
-                'method' => $request->getMethod(),
-                'route' => $this->routes->resolve($request),
-                'status' => $status,
-            ]);
-
-            $this->requests->inc(1.0, $labels);
-            $this->duration->observe((float) (hrtime(as_number: true) - $start) / 1e9, $labels);
+            throw $throwable;
         }
+
+        $this->record($request, (string) $response->getStatusCode(), $start);
+
+        return $response;
+    }
+
+    private function record(ServerRequestInterface $request, string $status, float $start): void
+    {
+        $labels = new LabelSet([
+            'method' => $request->getMethod(),
+            'route' => $this->routes->resolve($request),
+            'status' => $status,
+        ]);
+
+        $this->requests->inc(1.0, $labels);
+        $this->duration->observe(((float) hrtime(as_number: true) - $start) / 1e9, $labels);
     }
 }

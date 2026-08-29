@@ -8,12 +8,15 @@ use Rasuvaeff\Yii3Metrics\Buckets;
 use Rasuvaeff\Yii3Metrics\Exception\InvalidArgumentException;
 
 /**
- * Shared structural validation for metric registration and recording — applied by
- * every meter (including the no-op one) so a bad name, bucket layout or
- * non-finite amount fails fast rather than only when a recording backend is
- * enabled.
+ * Shared structural validation for metric registration and recording — applied
+ * by every meter, the first-party backends included, so a bad name, bucket
+ * layout or non-finite amount fails fast rather than only when a recording
+ * backend is enabled. Stable API for the backend family: the Prometheus (and
+ * any future) backend calls the same checks, so validation cannot drift per
+ * backend (promphp's own name regex, for one, anchors with `$` and lets a
+ * trailing newline through).
  *
- * @internal
+ * @api
  */
 final class Validation
 {
