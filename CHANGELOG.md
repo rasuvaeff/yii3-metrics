@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2.1.0 — 2026-08-29
+
+- Fix a throwing route resolver (or storage) masking the handler's throwable
+  in `RedMetricsMiddleware`. Recording on the failure path is now guarded:
+  its errors are swallowed there so the original exception keeps propagating;
+  on a successful request the same failure still propagates (#24).
+- `Internal\Validation` is now stable API for the backend family (`@api`):
+  the first-party backends call the same checks as the core meters, so
+  metric-name and bucket validation cannot drift per backend (#24).
+- `MeterProviderInterface::getMeter()` documents its contract: `$name` is an
+  instrumentation scope for diagnostics, metric state is global per
+  `(kind, name)`, and a provider MAY return the same meter for every name (#24).
+
 ## 2.0.0 — 2026-08-22
 
 - **Behaviour change — the RED `route` label no longer defaults to the request

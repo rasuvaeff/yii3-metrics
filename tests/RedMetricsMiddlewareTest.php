@@ -6,9 +6,9 @@ namespace Rasuvaeff\Yii3Metrics\Tests;
 
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\Response;
-use Psr\Http\Message\ResponseInterface;
-use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Rasuvaeff\Understudy\Arg;
+use Rasuvaeff\Understudy\Understudy;
 use Rasuvaeff\Yii3Metrics\BoundedRouteResolver;
 use Rasuvaeff\Yii3Metrics\ConstantRouteResolver;
 use Rasuvaeff\Yii3Metrics\InMemoryMeterProvider;
@@ -22,6 +22,8 @@ use Testo\Assert;
 use Testo\Codecov\Covers;
 use Testo\Lifecycle\BeforeTest;
 use Testo\Test;
+
+use function Rasuvaeff\Understudy\when;
 
 #[Test]
 #[Covers(RedMetricsMiddleware::class)]
@@ -91,18 +93,54 @@ final class RedMetricsMiddlewareTest
 
     public function usesTheInjectedRouteResolver(): void
     {
-        $resolver = new class implements RouteResolverInterface {
-            #[\Override]
-            public function resolve(ServerRequestInterface $request): string
-            {
-                return '/users/{id}';
-            }
-        };
+        $resolver = Understudy::for(RouteResolverInterface::class);
+        when(fn() => $resolver->resolve(Arg::any()))->returns('/users/{id}');
         $middleware = new RedMetricsMiddleware($this->registry, $resolver);
 
         $middleware->process($this->factory->createServerRequest('GET', 'https://x/users/123'), $this->handler(200));
 
         Assert::same($this->snapshot('http_server_requests_total')->samples[0]->labels->labels['route'], '/users/{id}');
+    }
+
+    /**
+     * A resolver (or storage) failure while recording a failed request must not
+     * replace the handler's throwable — the root cause of the request is what
+     * the caller can act on.
+     */
+    public function handlerFailureIsNotMaskedByAResolverFailure(): void
+    {
+        $resolver = Understudy::for(RouteResolverInterface::class);
+        when(fn() => $resolver->resolve(Arg::any()))->throws(new \RuntimeException('resolver down'));
+        $middleware = new RedMetricsMiddleware($this->registry, $resolver);
+
+        try {
+            $middleware->process(
+                $this->factory->createServerRequest('POST', 'https://x/orders'),
+                $this->throwingHandler(),
+            );
+            Assert::fail('expected the handler exception to propagate');
+        } catch (\RuntimeException $e) {
+            Assert::same($e->getMessage(), 'boom');
+        }
+    }
+
+    /**
+     * On a successful request the same resolver failure is a deployment error
+     * and still propagates — swallowing it there would silently drop every
+     * RED sample.
+     */
+    public function resolverFailurePropagatesAfterASuccessfulHandler(): void
+    {
+        $resolver = Understudy::for(RouteResolverInterface::class);
+        when(fn() => $resolver->resolve(Arg::any()))->throws(new \RuntimeException('resolver down'));
+        $middleware = new RedMetricsMiddleware($this->registry, $resolver);
+
+        try {
+            $middleware->process($this->factory->createServerRequest('GET', 'https://x/users'), $this->handler(200));
+            Assert::fail('expected the resolver exception to propagate');
+        } catch (\RuntimeException $e) {
+            Assert::same($e->getMessage(), 'resolver down');
+        }
     }
 
     /**
@@ -203,25 +241,17 @@ final class RedMetricsMiddlewareTest
 
     private function handler(int $status): RequestHandlerInterface
     {
-        return new readonly class ($status) implements RequestHandlerInterface {
-            public function __construct(private int $status) {}
+        $handler = Understudy::for(RequestHandlerInterface::class);
+        when(fn() => $handler->handle(Arg::any()))->returns(new Response($status));
 
-            #[\Override]
-            public function handle(ServerRequestInterface $request): ResponseInterface
-            {
-                return new Response($this->status);
-            }
-        };
+        return $handler;
     }
 
     private function throwingHandler(): RequestHandlerInterface
     {
-        return new class implements RequestHandlerInterface {
-            #[\Override]
-            public function handle(ServerRequestInterface $request): ResponseInterface
-            {
-                throw new \RuntimeException('boom');
-            }
-        };
+        $handler = Understudy::for(RequestHandlerInterface::class);
+        when(fn() => $handler->handle(Arg::any()))->throws(new \RuntimeException('boom'));
+
+        return $handler;
     }
 }

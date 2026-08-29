@@ -187,7 +187,7 @@ $snapshots = $provider->snapshots(); // list<MetricSnapshot>, no timestamp
 | Тип | Роль |
 |---|---|
 | `MetricRegistry` | фасад: `counter/gauge/upDownCounter/histogram(name, help, labelNames, buckets)` |
-| `MeterProviderInterface` / `MeterInterface` | точка входа сменного backend'а; meter создаёт и мемоизирует инструменты |
+| `MeterProviderInterface` / `MeterInterface` | точка входа сменного backend'а; meter создаёт и мемоизирует инструменты. `$name` в `getMeter($name)` — instrumentation scope для диагностики: стейт метрик глобален по `(kind, name)`, провайдер МОЖЕТ возвращать один и тот же meter для любого имени |
 | `CounterInterface` / `GaugeInterface` / `UpDownCounterInterface` / `HistogramInterface` | контракты инструментов |
 | `LabelSet` / `MetricKind` | валидируемые пары лейблов / enum вида инструмента (`Counter`, `Gauge`, `UpDownCounter`, `Histogram`) |
 | `MetricSnapshot` / `MetricSample` | собранное состояние: метрика (name, kind, help) и её сэмплы по каждому набору лейблов |
@@ -198,6 +198,7 @@ $snapshots = $provider->snapshots(); // list<MetricSnapshot>, no timestamp
 | `PathRouteResolver`, `BoundedRouteResolver` | opt-in лейбл из сырого пути; bounded-декоратор ограничивает число различных значений |
 | `CurrentRouteResolver` | лейбл маршрута из сматченного паттерна `yiisoft/router` (optional dep) |
 | `Buckets` | общие раскладки бакетов гистограммы (`Buckets::PROMETHEUS_DEFAULTS`, секунды, без хвостового `+Inf`) |
+| `Internal\Validation` | стабильная валидация для семейства backend'ов: грамматика имени метрики, конечность значений, раскладка бакетов — одни и те же проверки в каждом meter'е и в first-party backend'ах |
 
 ## Подключение (`yiisoft/config`)
 
