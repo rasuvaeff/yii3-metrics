@@ -76,14 +76,14 @@ final class ConfigWiringTest
     public function webConfigBindsTheRedMiddlewareWithParams(): void
     {
         /** @var array<string, mixed> $params */
-        $params = require dirname(__DIR__) . '/config/params.php';
+        $params = require __DIR__ . '/../config/params.php';
         $params['rasuvaeff/yii3-metrics']['red'] = [
             'duration_buckets' => [0.1, 1.0],
             'excluded_paths' => ['/metrics'],
         ];
 
         /** @var array<string, mixed> $di */
-        $di = (static fn(array $params): array => require dirname(__DIR__) . '/config/di-web.php')($params);
+        $di = (static fn(array $params): array => require __DIR__ . '/../config/di-web.php')($params);
 
         Assert::array($di)->hasKeys(RedMetricsMiddleware::class);
 
@@ -105,7 +105,7 @@ final class ConfigWiringTest
     public function paramsAreNamespaced(): void
     {
         /** @var array<string, mixed> $params */
-        $params = require dirname(__DIR__) . '/config/params.php';
+        $params = require __DIR__ . '/../config/params.php';
 
         Assert::array($params)->hasKeys('rasuvaeff/yii3-metrics');
         Assert::array($params['rasuvaeff/yii3-metrics']['red'])->hasKeys('duration_buckets', 'excluded_paths');
@@ -117,7 +117,7 @@ final class ConfigWiringTest
     private function di(): array
     {
         /** @var array<string, mixed> $di */
-        $di = require dirname(__DIR__) . '/config/di.php';
+        $di = require __DIR__ . '/../config/di.php';
 
         return $di;
     }

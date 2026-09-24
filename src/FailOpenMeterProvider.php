@@ -34,7 +34,7 @@ final class FailOpenMeterProvider implements MeterProviderInterface
 
     public function run(string $metric, callable $write): void
     {
-        $now = microtime(true);
+        $now = microtime(as_float: true);
 
         if ($now < $this->retryAt) {
             return;

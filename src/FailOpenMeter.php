@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Rasuvaeff\Yii3Metrics;
 
 /** @internal */
-final class FailOpenMeter implements MeterInterface
+final readonly class FailOpenMeter implements MeterInterface
 {
     public function __construct(
-        private readonly MeterInterface $inner,
-        private readonly FailOpenMeterProvider $provider,
+        private MeterInterface $inner,
+        private FailOpenMeterProvider $provider,
     ) {}
 
     #[\Override]
