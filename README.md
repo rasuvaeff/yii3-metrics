@@ -176,6 +176,21 @@ $registry = new MetricRegistry($provider);
 $registry->counter('c')->inc();
 
 $snapshots = $provider->snapshots(); // list<MetricSnapshot>, no timestamp
+$provider->value('c');                // float|null for one label set
+$provider->values('c');               // canonical LabelSet::key() => float
+$provider->has('c');                  // whether the metric is registered
+$provider->reset();                   // clear all in-memory state
+```
+
+For a backend that must not make a business operation fail, wrap its provider
+explicitly with `FailOpenMeterProvider`. Backend failures are logged once per
+cooldown and writes are dropped until the next retry; core validation errors
+still propagate.
+
+```php
+use Rasuvaeff\Yii3Metrics\FailOpenMeterProvider;
+
+$provider = new FailOpenMeterProvider($provider, $logger, cooldownSeconds: 30.0);
 ```
 
 ### API surface
@@ -188,7 +203,8 @@ $snapshots = $provider->snapshots(); // list<MetricSnapshot>, no timestamp
 | `LabelSet` / `MetricKind` | validated label pairs / instrument kind enum (`Counter`, `Gauge`, `UpDownCounter`, `Histogram`) |
 | `MetricSnapshot` / `MetricSample` | collected state: a metric (name, kind, help) and its per-label-set samples |
 | `NullMeterProvider`, `NullMeter`, `NullCounter`, `NullGauge`, `NullUpDownCounter`, `NullHistogram` | no-op backend (config-only default; still validates structure) |
-| `InMemoryMeterProvider`, `InMemoryMeter`, `InMemoryCounter`, `InMemoryGauge`, `InMemoryUpDownCounter`, `InMemoryHistogram` | single-process dev/test backend with `snapshots()` |
+| `InMemoryMeterProvider`, `InMemoryMeter`, `InMemoryCounter`, `InMemoryGauge`, `InMemoryUpDownCounter`, `InMemoryHistogram` | single-process dev/test backend with snapshots and lookup/reset helpers |
+| `FailOpenMeterProvider` | optional decorator that drops backend failures during a cooldown |
 | `RedMetricsMiddleware`, `RouteResolverInterface` | PSR-15 RED instrumentation |
 | `ConstantRouteResolver` | safe default `route` label: a constant, never derived from the request |
 | `PathRouteResolver`, `BoundedRouteResolver` | opt-in raw-path label; the bounded decorator caps how many distinct values are ever emitted |

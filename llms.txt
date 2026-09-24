@@ -84,7 +84,15 @@ use Rasuvaeff\Yii3Metrics\{NullMeterProvider, InMemoryMeterProvider, MetricRegis
 new MetricRegistry(new NullMeterProvider());     // no-op
 $p = new InMemoryMeterProvider();                // dev/test
 $p->snapshots();                                 // list<MetricSnapshot> (no timestamp)
+$p->value('c', ['queue' => 'fast']);             // float|null
+$p->values('c');                                 // LabelSet::key() => float
+$p->histogram('h', ['route' => '/']);            // MetricSample|null
+$p->has('c'); $p->reset();                       // inspect / clear state
 ```
+
+`FailOpenMeterProvider($inner, $logger, cooldownSeconds: 30.0)` is an opt-in
+decorator. Backend throwables are logged once per cooldown and writes are
+dropped until retry; core `InvalidArgumentException` validation errors propagate.
 
 ### RED middleware (PSR-15)
 
