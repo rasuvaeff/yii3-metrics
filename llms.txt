@@ -91,8 +91,13 @@ $p->has('c'); $p->reset();                       // inspect / clear state
 ```
 
 `FailOpenMeterProvider($inner, $logger, cooldownSeconds: 30.0)` is an opt-in
-decorator. Backend throwables are logged once per cooldown and writes are
-dropped until retry; core `InvalidArgumentException` validation errors propagate.
+decorator for writes. Backend throwables are logged once per provider-instance
+cooldown and writes are dropped until retry. `InvalidArgumentException` from an
+attempted write propagates; during cooldown write validation is skipped too.
+Meter/instrument creation and logger failures are outside the protection.
+After `InMemoryMeterProvider::reset()`, recreate the `MetricRegistry` and instruments:
+old references retain the detached meter. Missing series return null from
+`value()`/`histogram()`; `has()` means registered, not necessarily recorded.
 
 ### RED middleware (PSR-15)
 

@@ -1,0 +1,38 @@
+{
+    "name": "rasuvaeff/metrics-skill-smoke",
+    "type": "project",
+    "license": "BSD-3-Clause",
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../..",
+            "options": {
+                "symlink": false,
+                "versions": {
+                    "rasuvaeff/yii3-metrics": "2.2.0"
+                }
+            }
+        }
+    ],
+    "require": {
+        "rasuvaeff/yii3-metrics": "2.2.0",
+        "rasuvaeff/yii3-metrics-prometheus": "^2.1",
+        "testo/testo": "^0.10.25",
+        "yiisoft/config": "^1.6",
+        "yiisoft/di": "^1.0"
+    },
+    "config": {
+        "allow-plugins": {
+            "yiisoft/config": true
+        }
+    },
+    "extra": {
+        "config-plugin": {
+            "di": ["logger.php", "metrics.php"],
+            "params": "params.php"
+        },
+        "config-plugin-options": {
+            "source-directory": "config"
+        }
+    }
+}

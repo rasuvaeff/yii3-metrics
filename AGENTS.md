@@ -140,7 +140,11 @@ Or with Make: `make build`, `make cs-fix`, `make psalm`, `make test`,
 
 ## When you finish
 
-- Update `README.md` (and `examples/` if usage changed); update `CHANGELOG.md`
-  when releasing.
+- For every public API addition in `CHANGELOG.md`, check the signatures and
+  usage in `llms.txt` and `resources/skills/rasuvaeff-yii3-metrics/SKILL.md` before
+  release. Verify failure behaviour and DI examples against the implementation;
+  mentioning a symbol alone is not enough.
+- Update `README.md` and `README.ru.md` together (and `examples/` if usage changed);
+  update `CHANGELOG.md` when releasing.
 - Re-run `composer build`; paste the output. For releases also run mutation and
   `release-check`.
