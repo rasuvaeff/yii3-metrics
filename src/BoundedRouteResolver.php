@@ -34,7 +34,7 @@ final class BoundedRouteResolver implements RouteResolverInterface
 {
     public const string DEFAULT_OVERFLOW = '(other)';
 
-    /** @var array<array-key, true> */
+    /** @var array<array-key, bool> */
     private array $seen = [];
 
     /**
@@ -57,7 +57,7 @@ final class BoundedRouteResolver implements RouteResolverInterface
     {
         $route = $this->inner->resolve($request);
 
-        if (isset($this->seen[$route])) {
+        if (($this->seen[$route] ?? false) === true) {
             return $route;
         }
 

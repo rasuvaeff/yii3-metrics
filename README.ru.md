@@ -179,7 +179,21 @@ $provider = new InMemoryMeterProvider();
 $registry = new MetricRegistry($provider);
 $registry->counter('c')->inc();
 
-$snapshots = $provider->snapshots(); // list<MetricSnapshot>, no timestamp
+$snapshots = $provider->snapshots(); // list<MetricSnapshot>, без timestamp
+$provider->value('c');                // float|null для одного набора labels
+$provider->values('c');               // canonical LabelSet::key() => float
+$provider->has('c');                  // зарегистрирована ли метрика
+$provider->reset();                   // очистить состояние in-memory
+```
+
+Чтобы сбой backend не прерывал бизнес-операцию, явно оберните provider в
+`FailOpenMeterProvider`. Ошибка backend логируется один раз за cooldown, записи
+в этот период отбрасываются; ошибки валидации core по-прежнему пробрасываются.
+
+```php
+use Rasuvaeff\Yii3Metrics\FailOpenMeterProvider;
+
+$provider = new FailOpenMeterProvider($provider, $logger, cooldownSeconds: 30.0);
 ```
 
 ### API surface
@@ -192,7 +206,8 @@ $snapshots = $provider->snapshots(); // list<MetricSnapshot>, no timestamp
 | `LabelSet` / `MetricKind` | валидируемые пары лейблов / enum вида инструмента (`Counter`, `Gauge`, `UpDownCounter`, `Histogram`) |
 | `MetricSnapshot` / `MetricSample` | собранное состояние: метрика (name, kind, help) и её сэмплы по каждому набору лейблов |
 | `NullMeterProvider`, `NullMeter`, `NullCounter`, `NullGauge`, `NullUpDownCounter`, `NullHistogram` | no-op backend (config-only по умолчанию; всё равно валидирует структуру) |
-| `InMemoryMeterProvider`, `InMemoryMeter`, `InMemoryCounter`, `InMemoryGauge`, `InMemoryUpDownCounter`, `InMemoryHistogram` | single-process dev/test backend с `snapshots()` |
+| `InMemoryMeterProvider`, `InMemoryMeter`, `InMemoryCounter`, `InMemoryGauge`, `InMemoryUpDownCounter`, `InMemoryHistogram` | single-process dev/test backend со snapshot и helpers поиска/сброса |
+| `FailOpenMeterProvider` | опциональный decorator, отбрасывающий сбои backend на время cooldown |
 | `RedMetricsMiddleware`, `RouteResolverInterface` | PSR-15 RED-инструментирование |
 | `ConstantRouteResolver` | безопасный дефолт лейбла `route`: константа, никогда не выводится из запроса |
 | `PathRouteResolver`, `BoundedRouteResolver` | opt-in лейбл из сырого пути; bounded-декоратор ограничивает число различных значений |

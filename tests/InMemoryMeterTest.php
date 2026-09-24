@@ -218,6 +218,40 @@ final class InMemoryMeterTest
         Assert::same((new InMemoryMeterProvider())->snapshots(), []);
     }
 
+    public function providerHelpersReadLabelledValuesAndHistograms(): void
+    {
+        $provider = new InMemoryMeterProvider();
+        $meter = $provider->getMeter();
+        $meter->counter('jobs_total', labelNames: ['queue'])->inc(2.0, new LabelSet(['queue' => 'fast']));
+        $meter->counter('jobs_total', labelNames: ['queue'])->inc(3.0, new LabelSet(['queue' => 'slow']));
+        $meter->histogram('job_seconds')->observe(0.25);
+
+        Assert::same($provider->value('jobs_total', ['queue' => 'fast']), 2.0);
+        Assert::null($provider->value('missing_total'));
+        Assert::same($provider->values('jobs_total'), [
+            (new LabelSet(['queue' => 'fast']))->key() => 2.0,
+            (new LabelSet(['queue' => 'slow']))->key() => 3.0,
+        ]);
+        Assert::true($provider->has('jobs_total'));
+        Assert::false($provider->has('missing_total'));
+
+        $sample = $provider->histogram('job_seconds');
+        Assert::instanceOf($sample, MetricSample::class);
+        Assert::same($sample->value, 1.0);
+        Assert::same($sample->sum, 0.25);
+    }
+
+    public function providerResetDropsAllRecordedState(): void
+    {
+        $provider = new InMemoryMeterProvider();
+        $provider->getMeter()->counter('jobs_total')->inc();
+
+        $provider->reset();
+
+        Assert::same($provider->snapshots(), []);
+        Assert::false($provider->has('jobs_total'));
+    }
+
     /**
      * Regression: `if ($amount < 0)` is false for `NAN`, so `NAN` and `INF` used
      * to reach the accumulators. `NAN` is absorbing, so one such recording turned
