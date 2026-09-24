@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 2.2.1 — 2026-09-24
 
+- Apply Rector cleanup to the internal fail-open meter and config wiring tests.
+
 - Refresh the consumer skill with fail-open wiring, in-memory test helpers, and
   Prometheus storage/scrape guidance; clarify cooldown and reset limitations.
 - Add a consumer smoke check for the skill's application DI override and a
