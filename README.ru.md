@@ -186,9 +186,14 @@ $provider->has('c');                  // зарегистрирована ли �
 $provider->reset();                   // очистить состояние in-memory
 ```
 
-Чтобы сбой backend не прерывал бизнес-операцию, явно оберните provider в
-`FailOpenMeterProvider`. Ошибка backend логируется один раз за cooldown, записи
-в этот период отбрасываются; ошибки валидации core по-прежнему пробрасываются.
+После `reset()` создайте заново `MetricRegistry` и инструменты: существующие
+ссылки сохраняют отсоединённый meter.
+
+Чтобы отбрасывать сбои записи backend в коде приложения, оберните provider в
+`FailOpenMeterProvider`. Ошибка логируется один раз за cooldown экземпляра
+provider; записи отбрасываются до повторной попытки. `InvalidArgumentException`
+при выполнении записи пробрасывается; во время cooldown пропускаются и запись,
+и её валидация. Создание meter/инструментов и сбои logger этой защитой не покрыты.
 
 ```php
 use Rasuvaeff\Yii3Metrics\FailOpenMeterProvider;

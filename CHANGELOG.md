@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+- Refresh the consumer skill with fail-open wiring, in-memory test helpers, and
+  Prometheus storage/scrape guidance; clarify cooldown and reset limitations.
+- Add a consumer smoke check for the skill's application DI override and a
+  release checklist for API documentation parity.
+
 ## 2.2.0 — 2026-09-24
 
 - Add `FailOpenMeterProvider` for optional fail-open backend writes.

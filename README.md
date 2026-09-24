@@ -182,10 +182,14 @@ $provider->has('c');                  // whether the metric is registered
 $provider->reset();                   // clear all in-memory state
 ```
 
-For a backend that must not make a business operation fail, wrap its provider
-explicitly with `FailOpenMeterProvider`. Backend failures are logged once per
-cooldown and writes are dropped until the next retry; core validation errors
-still propagate.
+After `reset()`, recreate the `MetricRegistry` and instruments: existing
+references retain the detached meter.
+
+To drop backend write failures on application paths, wrap the provider with
+`FailOpenMeterProvider`. Failures are logged once per provider-instance cooldown
+and writes are dropped until retry. `InvalidArgumentException` from an attempted
+write propagates; during cooldown the write and its validation are both skipped.
+Meter/instrument creation and logger failures are outside this protection.
 
 ```php
 use Rasuvaeff\Yii3Metrics\FailOpenMeterProvider;
