@@ -227,6 +227,7 @@ final class InMemoryMeterTest
         $meter->histogram('job_seconds')->observe(0.25);
 
         Assert::same($provider->value('jobs_total', ['queue' => 'fast']), 2.0);
+        Assert::null($provider->value('missing_total'));
         Assert::same($provider->values('jobs_total'), [
             (new LabelSet(['queue' => 'fast']))->key() => 2.0,
             (new LabelSet(['queue' => 'slow']))->key() => 3.0,

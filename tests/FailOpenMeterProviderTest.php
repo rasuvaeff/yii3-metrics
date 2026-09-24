@@ -29,12 +29,46 @@ final class FailOpenMeterProviderTest
     {
         $logger = new RecordingLogger();
         $provider = new FailOpenMeterProvider(new FailingProvider(), $logger, cooldownSeconds: 60.0);
+        $calls = 0;
+
+        $write = static function () use (&$calls): void {
+            ++$calls;
+
+            throw new \RuntimeException('backend unavailable');
+        };
+        $provider->run('jobs_total', $write);
+        $provider->run('jobs_total', $write);
+
+        Assert::same($calls, 1);
+        Assert::count($logger->records, 1);
+        Assert::same($logger->records[0]['context'], [
+            'metric' => 'jobs_total',
+            'exception' => 'backend unavailable',
+        ]);
+    }
+
+    public function retriesAndLogsAgainWhenCooldownIsZero(): void
+    {
+        $logger = new RecordingLogger();
+        $provider = new FailOpenMeterProvider(new FailingProvider(), $logger, cooldownSeconds: 0.0);
         $counter = $provider->getMeter()->counter('jobs_total');
 
         $counter->inc();
         $counter->inc();
 
-        Assert::count($logger->records, 1);
+        Assert::count($logger->records, 2);
+    }
+
+    public function rejectsNegativeOrNonFiniteCooldown(): void
+    {
+        foreach ([-1.0, INF, NAN] as $cooldown) {
+            try {
+                new FailOpenMeterProvider(new FailingProvider(), new RecordingLogger(), $cooldown);
+                Assert::fail('expected an InvalidArgumentException');
+            } catch (InvalidArgumentException $exception) {
+                Assert::string($exception->getMessage())->contains('Cooldown');
+            }
+        }
     }
 
     public function preservesValidationFailures(): void
@@ -54,13 +88,13 @@ final class FailOpenMeterProviderTest
 /** @internal */
 final class RecordingLogger extends AbstractLogger
 {
-    /** @var list<string> */
+    /** @var list<array{message: string, context: array<string, mixed>}> */
     public array $records = [];
 
     #[\Override]
     public function log($level, $message, array $context = []): void
     {
-        $this->records[] = (string) $message;
+        $this->records[] = ['message' => (string) $message, 'context' => $context];
     }
 }
 

@@ -45,15 +45,12 @@ final class FailOpenMeterProvider implements MeterProviderInterface
         } catch (\InvalidArgumentException $exception) {
             throw $exception;
         } catch (\Throwable $exception) {
-            $shouldLog = $now >= $this->retryAt;
             $this->retryAt = $now + $this->cooldownSeconds;
 
-            if ($shouldLog) {
-                $this->logger->warning('Metrics backend failed; writes are temporarily dropped', [
-                    'metric' => $metric,
-                    'exception' => $exception->getMessage(),
-                ]);
-            }
+            $this->logger->warning('Metrics backend failed; writes are temporarily dropped', [
+                'metric' => $metric,
+                'exception' => $exception->getMessage(),
+            ]);
         }
     }
 }
