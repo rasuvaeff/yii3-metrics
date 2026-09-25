@@ -472,13 +472,17 @@ final class InMemoryMeterTest
 
         // Every bucket has to be the one a value lands in at least sometimes:
         // a run whose values all fell past 5.0 would only ever check the +Inf
-        // bucket and say nothing about the cumulative counts below it.
-        // Floors are under half the share the range implies: over
-        // [-1.0, 10.0] the first bucket is ~10% of draws, the middle two
-        // ~8%, and everything past 5.0 ~45%.
-        Classify::cover($value <= 0.1, 'lands in the first bucket', 4.0);
-        Classify::cover($value > 0.1 && $value <= 1.0, 'lands mid-range', 3.0);
-        Classify::cover($value > 5.0, 'past the last finite bound', 20.0);
+        // bucket and say nothing about the cumulative counts below it. The
+        // generator draws one range per bucket, so each gets a fixed share of
+        // runs, and its edge bias lands exactly on the `le` bounds. Floors sit
+        // below the lowest share measured over 20,000 seeds of 200 runs
+        // (first 12.5%, mid-range 22%, past 5.0 7%, on a bound 6.5%). A
+        // uniform draw over [-1.0, 10.0] gave mid-range only ~6.5% and failed
+        // its 3% floor in ~0.85% of runs.
+        Classify::cover($value <= 0.1, 'lands in the first bucket', 8.0);
+        Classify::cover($value > 0.1 && $value <= 1.0, 'lands mid-range', 15.0);
+        Classify::cover($value > 5.0, 'past the last finite bound', 4.0);
+        Classify::cover(\in_array($value, [0.1, 0.5, 1.0, 5.0], strict: true), 'exactly on a bound', 3.0);
 
         $sample = $meter->snapshots()[0]->samples[0];
         Assert::same($sample->value, 1.0);
@@ -494,7 +498,13 @@ final class InMemoryMeterTest
     public static function histogramBucketsAreCumulativeGenerators(): array
     {
         return [
-            'value' => Gen::floatBetween(-1.0, 10.0),
+            'value' => Gen::frequency([
+                [1, Gen::floatBetween(-1.0, 0.1)],
+                [1, Gen::floatBetween(0.1, 0.5)],
+                [1, Gen::floatBetween(0.5, 1.0)],
+                [1, Gen::floatBetween(1.0, 5.0)],
+                [1, Gen::floatBetween(5.0, 10.0)],
+            ]),
         ];
     }
 
