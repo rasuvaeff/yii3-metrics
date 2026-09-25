@@ -86,6 +86,23 @@ single-process convenience) would restart from the process-local value.
   is an absolute write, so it accepts `±INF` (the exposition has `+Inf`/`-Inf`
   tokens) but still rejects `NAN`, which promphp coerces to an invalid token
   while raising a PHP warning.
+- **Strict naming (opt-in).** `new InMemoryMeterProvider(strictNaming: true)`,
+  `new NullMeterProvider(strictNaming: true)` or `new NullMeter(strictNaming: true)`
+  check each registration and throw `Exception\InvalidArgumentException` there,
+  not at the first write:
+  - a counter must end with `_total`; a gauge, up-down counter or histogram must
+    not; a histogram must not end with `_bucket`, `_sum` or `_count`;
+  - a repeated name must repeat the definition: same kind, label names (in any
+    order) and bucket layout. Two different non-empty help texts conflict; an
+    empty help matches any, so `counter('a_total')` still fetches a described
+    counter;
+  - two metrics must not expose the same series (a gauge `latency_count` next
+    to a histogram `latency`).
+
+  The default is lenient, as in 2.2: the first registration's help and buckets
+  win and nothing above is checked. `NullMeter::instance()` stays lenient. A
+  strict `NullMeterProvider` makes the rules fail in test suites that run with
+  metrics disabled.
 
 ### RED middleware
 
@@ -215,6 +232,7 @@ $provider = new FailOpenMeterProvider($provider, $logger, cooldownSeconds: 30.0)
 | `CurrentRouteResolver` | route label from the matched `yiisoft/router` pattern (optional dep) |
 | `Buckets` | shared histogram bucket layouts (`Buckets::PROMETHEUS_DEFAULTS`, seconds, no trailing `+Inf`) |
 | `Internal\Validation` | stable validation for the backend family: metric-name grammar, finite amounts, histogram bucket layout — every meter and first-party backend applies the same checks |
+| `Internal\RegistrationGuard` | strict-naming checks for the backend family: suffix conventions, conflicting re-registration, series collisions; one guard per meter |
 
 ## Wiring (`yiisoft/config`)
 
@@ -230,6 +248,8 @@ use Rasuvaeff\Yii3Metrics\NullMeterProvider;
 
 return [
     MeterProviderInterface::class => NullMeterProvider::class,
+    // or, to enforce naming conventions while metrics are off:
+    // MeterProviderInterface::class => new NullMeterProvider(strictNaming: true),
 ];
 ```
 

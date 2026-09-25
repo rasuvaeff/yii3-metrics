@@ -39,7 +39,9 @@ final class RedMetricsMiddlewareTest
     #[BeforeTest]
     public function setUp(): void
     {
-        $this->provider = new InMemoryMeterProvider();
+        // Strict naming: the shipped RED metric names must satisfy the
+        // conventions an application may opt into.
+        $this->provider = new InMemoryMeterProvider(strictNaming: true);
         $this->registry = new MetricRegistry($this->provider);
         $this->factory = new Psr17Factory();
     }

@@ -87,6 +87,24 @@ $latency->observe(0.023, new LabelSet(['op' => 'select']));
   стораджа backend'а. `gauge->set()` — абсолютная запись, поэтому принимает
   `±INF` (в экспозиции есть токены `+Inf`/`-Inf`), но всё равно отклоняет `NAN`:
   promphp приводит его к невалидному токену и попутно поднимает PHP-warning.
+- **Строгое именование (opt-in).** `new InMemoryMeterProvider(strictNaming: true)`,
+  `new NullMeterProvider(strictNaming: true)` или `new NullMeter(strictNaming: true)`
+  проверяют каждую регистрацию и бросают `Exception\InvalidArgumentException`
+  сразу при ней, а не при первой записи:
+  - counter обязан заканчиваться на `_total`; gauge, up-down counter и
+    histogram — нет; histogram не может заканчиваться на `_bucket`, `_sum` или
+    `_count`;
+  - повторное имя обязано повторять определение: тот же вид, те же имена
+    лейблов (в любом порядке) и та же раскладка бакетов. Два разных непустых
+    help — конфликт; пустой help совпадает с любым, поэтому `counter('a_total')`
+    по-прежнему достаёт описанный counter;
+  - две метрики не могут отдавать одну и ту же серию (gauge `latency_count`
+    рядом с histogram `latency`).
+
+  По умолчанию режим мягкий, как в 2.2: help и бакеты первой регистрации
+  выигрывают, ничего из перечисленного не проверяется. `NullMeter::instance()`
+  остаётся мягким. Строгий `NullMeterProvider` роняет эти правила в тестах,
+  которые гоняются с выключенными метриками.
 
 ### RED middleware
 
@@ -219,6 +237,7 @@ $provider = new FailOpenMeterProvider($provider, $logger, cooldownSeconds: 30.0)
 | `CurrentRouteResolver` | лейбл маршрута из сматченного паттерна `yiisoft/router` (optional dep) |
 | `Buckets` | общие раскладки бакетов гистограммы (`Buckets::PROMETHEUS_DEFAULTS`, секунды, без хвостового `+Inf`) |
 | `Internal\Validation` | стабильная валидация для семейства backend'ов: грамматика имени метрики, конечность значений, раскладка бакетов — одни и те же проверки в каждом meter'е и в first-party backend'ах |
+| `Internal\RegistrationGuard` | проверки строгого именования для семейства backend'ов: суффиксы, конфликтующая повторная регистрация, коллизии серий; один guard на meter |
 
 ## Подключение (`yiisoft/config`)
 
@@ -233,6 +252,8 @@ use Rasuvaeff\Yii3Metrics\NullMeterProvider;
 
 return [
     MeterProviderInterface::class => NullMeterProvider::class,
+    // или, чтобы соблюдать правила именования при выключенных метриках:
+    // MeterProviderInterface::class => new NullMeterProvider(strictNaming: true),
 ];
 ```
 

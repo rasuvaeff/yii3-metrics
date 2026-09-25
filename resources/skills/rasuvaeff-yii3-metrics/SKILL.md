@@ -26,6 +26,13 @@ Namespace `Rasuvaeff\Yii3Metrics`.
    $registry->counter('orders.total');   // throws — dots are invalid
    ```
 
+   Suffix conventions and conflicting re-registration are checked only with
+   strict naming (core 2.3+, opt-in): `new InMemoryMeterProvider(strictNaming: true)`
+   in tests, `new NullMeterProvider(strictNaming: true)` with metrics off. Then a
+   counter must end with `_total`, nothing else may, a histogram must not end
+   with `_bucket`/`_sum`/`_count`, and re-registering a name with other label
+   names, buckets or a different non-empty help throws at registration.
+
 2. **Never put user ids or other dynamic values in labels.** Every distinct
    label value mints a new time series (cardinality explosion). Labels are for
    small closed sets: method, route pattern, status.
