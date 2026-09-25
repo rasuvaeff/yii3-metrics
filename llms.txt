@@ -37,6 +37,15 @@ bind `MeterProviderInterface => NullMeterProvider`.
   php-fpm workers, gauge inc/dec tallies are process-local.
 - Structural validation (name regex, bucket monotonicity) runs even in `NullMeter`;
   the negative-inc guard runs only in recording impls.
+- Strict naming is opt-in (`strictNaming: true` on `InMemoryMeterProvider`,
+  `InMemoryMeter`, `NullMeterProvider`, `NullMeter`; default `false`). It throws
+  at registration when: a counter lacks `_total`; a gauge/up-down
+  counter/histogram ends with `_total`; a histogram ends with
+  `_bucket|_sum|_count`; a name is re-registered with another kind, label names
+  (order-insensitive), buckets, or a different non-empty help (empty help matches
+  any); two metrics expose the same series (histogram `h` + gauge `h_count`).
+  `NullMeter::instance()` is always lenient. Backends reuse
+  `Internal\RegistrationGuard` (@api), one instance per meter.
 - `config/di.php` binds ONLY the facade (`MetricRegistry`) + `RouteResolverInterface`.
   NEVER bind `MeterProviderInterface` in core (one backend/app owns it, else
   `yiisoft/config` Duplicate key).
@@ -83,6 +92,8 @@ use Rasuvaeff\Yii3Metrics\{NullMeterProvider, InMemoryMeterProvider, MetricRegis
 
 new MetricRegistry(new NullMeterProvider());     // no-op
 $p = new InMemoryMeterProvider();                // dev/test
+new InMemoryMeterProvider(strictNaming: true);   // + naming/re-registration checks
+new NullMeterProvider(strictNaming: true);       // same checks with metrics off
 $p->snapshots();                                 // list<MetricSnapshot> (no timestamp)
 $p->value('c', ['queue' => 'fast']);             // float|null
 $p->values('c');                                 // LabelSet::key() => float

@@ -16,6 +16,7 @@ use Rasuvaeff\Yii3Metrics\InMemoryMeter;
 use Rasuvaeff\Yii3Metrics\InMemoryMeterProvider;
 use Rasuvaeff\Yii3Metrics\InMemoryUpDownCounter;
 use Rasuvaeff\Yii3Metrics\LabelSet;
+use Rasuvaeff\Yii3Metrics\MeterInterface;
 use Rasuvaeff\Yii3Metrics\MetricKind;
 use Rasuvaeff\Yii3Metrics\MetricSample;
 use Rasuvaeff\Yii3Metrics\MetricSnapshot;
@@ -77,6 +78,85 @@ final class InMemoryMeterTest
             Assert::fail('expected an InvalidArgumentException');
         } catch (InvalidArgumentException $e) {
             Assert::string($e->getMessage())->contains('cannot be decremented');
+        }
+    }
+
+    #[DataProvider('strictViolationProvider')]
+    public function strictMeterRejectsAtRegistration(\Closure $register, string $message): void
+    {
+        $meter = (new InMemoryMeterProvider(strictNaming: true))->getMeter();
+
+        try {
+            $register($meter);
+            Assert::fail('expected an InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains($message);
+        }
+    }
+
+    #[DataProvider('strictViolationProvider')]
+    public function lenientMeterKeepsAcceptingWhatStrictRejects(\Closure $register, string $message): void
+    {
+        $register((new InMemoryMeterProvider())->getMeter());
+        $register(new InMemoryMeter());
+
+        Assert::true(actual: true);
+    }
+
+    public static function strictViolationProvider(): iterable
+    {
+        yield 'counter without _total' => [static fn(MeterInterface $m) => $m->counter('requests'), 'must end with "_total"'];
+
+        yield 'gauge with _total' => [static fn(MeterInterface $m) => $m->gauge('tags_total'), 'kind gauge must not end'];
+
+        yield 'up-down counter with _total' => [static fn(MeterInterface $m) => $m->upDownCounter('inflight_total'), 'kind up_down_counter must not end'];
+
+        yield 'histogram with _total' => [static fn(MeterInterface $m) => $m->histogram('latency_total'), 'kind histogram must not end'];
+
+        yield 'counter re-registered with other labels' => [static function (MeterInterface $m): void {
+            $m->counter('a_total', labelNames: ['x']);
+            $m->counter('a_total', labelNames: ['y']);
+        }, 'is already registered'];
+
+        yield 'counter re-registered with other help' => [static function (MeterInterface $m): void {
+            $m->counter('a_total', 'A');
+            $m->counter('a_total', 'B');
+        }, 'is already registered'];
+
+        yield 'gauge re-registered with other labels' => [static function (MeterInterface $m): void {
+            $m->gauge('g', labelNames: ['x']);
+            $m->gauge('g', labelNames: ['y']);
+        }, 'is already registered'];
+
+        yield 'up-down counter re-registered with other labels' => [static function (MeterInterface $m): void {
+            $m->upDownCounter('u', labelNames: ['x']);
+            $m->upDownCounter('u', labelNames: ['y']);
+        }, 'is already registered'];
+
+        yield 'histogram re-registered with other buckets' => [static function (MeterInterface $m): void {
+            $m->histogram('h', labelNames: ['x'], buckets: [1.0]);
+            $m->histogram('h', labelNames: ['x'], buckets: [2.0]);
+        }, 'is already registered'];
+
+        yield 'histogram re-registered with other help' => [static function (MeterInterface $m): void {
+            $m->histogram('h', 'A');
+            $m->histogram('h', 'B');
+        }, 'is already registered'];
+    }
+
+    public function strictnessSurvivesReset(): void
+    {
+        $provider = new InMemoryMeterProvider(strictNaming: true);
+        $provider->getMeter()->counter('a_total', labelNames: ['x']);
+        $provider->reset();
+
+        $provider->getMeter()->counter('a_total', labelNames: ['y']);
+
+        try {
+            $provider->getMeter()->gauge('g_total');
+            Assert::fail('expected an InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('reserved for counters');
         }
     }
 

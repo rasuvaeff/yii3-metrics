@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+- Add opt-in strict naming: `strictNaming: true` on `InMemoryMeterProvider`,
+  `InMemoryMeter`, `NullMeterProvider` and `NullMeter` enforces suffix
+  conventions (counters end with `_total`, nothing else does; histograms avoid
+  `_bucket`/`_sum`/`_count`) and rejects, at registration, a name re-registered
+  with another kind, label names, buckets or non-empty help, and two metrics
+  exposing the same series. The default stays lenient (#39).
+- Add `Internal\RegistrationGuard` (`@api`) so backends apply the same checks.
+
 ## 2.2.1 — 2026-09-24
 
 - Apply Rector cleanup to the internal fail-open meter and config wiring tests.
