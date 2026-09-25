@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Rasuvaeff\Yii3Metrics;
 
-/** @internal */
+/**
+ * @internal
+ */
 final readonly class FailOpenGauge implements GaugeInterface
 {
     public function __construct(
