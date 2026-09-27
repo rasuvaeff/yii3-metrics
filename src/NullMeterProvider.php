@@ -13,9 +13,19 @@ namespace Rasuvaeff\Yii3Metrics;
  */
 final readonly class NullMeterProvider implements MeterProviderInterface
 {
+    private NullMeter $meter;
+
+    /**
+     * @param bool $strictNaming enforce suffix conventions and reject conflicting re-registration
+     */
+    public function __construct(bool $strictNaming = false)
+    {
+        $this->meter = $strictNaming ? new NullMeter(strictNaming: true) : NullMeter::instance();
+    }
+
     #[\Override]
     public function getMeter(?string $name = null): MeterInterface
     {
-        return NullMeter::instance();
+        return $this->meter;
     }
 }

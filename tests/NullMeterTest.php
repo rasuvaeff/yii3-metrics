@@ -153,4 +153,83 @@ final class NullMeterTest
             Assert::string($e->getMessage())->contains('strictly increasing');
         }
     }
+
+    public function defaultProviderSharesTheLenientSingleton(): void
+    {
+        $meter = (new NullMeterProvider())->getMeter();
+
+        Assert::same($meter, NullMeter::instance());
+
+        $meter->gauge('tags_total');
+        $meter->counter('a_total', labelNames: ['x']);
+        $meter->counter('a_total', labelNames: ['y']);
+    }
+
+    public function strictProviderReturnsOneStrictMeter(): void
+    {
+        $provider = new NullMeterProvider(strictNaming: true);
+        $meter = $provider->getMeter();
+
+        Assert::same($provider->getMeter('other'), $meter);
+        Assert::false($meter === NullMeter::instance());
+
+        $meter->counter('a_total', labelNames: ['x']);
+
+        try {
+            $meter->counter('a_total', labelNames: ['y']);
+            Assert::fail('expected an InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('is already registered');
+        }
+    }
+
+    #[DataProvider('strictViolationProvider')]
+    public function strictNullMeterRejectsWhatStrictRecordingMetersReject(\Closure $register, string $message): void
+    {
+        try {
+            $register(new NullMeter(strictNaming: true));
+            Assert::fail('expected an InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains($message);
+        }
+    }
+
+    public static function strictViolationProvider(): iterable
+    {
+        yield 'counter without _total' => [static fn(NullMeter $m) => $m->counter('requests'), 'must end with "_total"'];
+
+        yield 'gauge with _total' => [static fn(NullMeter $m) => $m->gauge('tags_total'), 'kind gauge must not end'];
+
+        yield 'up-down counter with _total' => [
+            static fn(NullMeter $m) => $m->upDownCounter('inflight_total'),
+            'kind up_down_counter must not end',
+        ];
+
+        yield 'histogram with _total' => [static fn(NullMeter $m) => $m->histogram('latency_total'), 'kind histogram must not end'];
+
+        yield 'counter re-registered with other help' => [static function (NullMeter $m): void {
+            $m->counter('a_total', 'A');
+            $m->counter('a_total', 'B');
+        }, 'is already registered'];
+
+        yield 'gauge re-registered with other labels' => [static function (NullMeter $m): void {
+            $m->gauge('g', labelNames: ['x']);
+            $m->gauge('g', labelNames: ['y']);
+        }, 'is already registered'];
+
+        yield 'up-down counter re-registered with other labels' => [static function (NullMeter $m): void {
+            $m->upDownCounter('u', labelNames: ['x']);
+            $m->upDownCounter('u', labelNames: ['y']);
+        }, 'is already registered'];
+
+        yield 'histogram re-registered with other buckets' => [static function (NullMeter $m): void {
+            $m->histogram('h', labelNames: ['x'], buckets: [1.0]);
+            $m->histogram('h', labelNames: ['x'], buckets: [2.0]);
+        }, 'is already registered'];
+
+        yield 'histogram re-registered with other help' => [static function (NullMeter $m): void {
+            $m->histogram('h', 'A');
+            $m->histogram('h', 'B');
+        }, 'is already registered'];
+    }
 }
