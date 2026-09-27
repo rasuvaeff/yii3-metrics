@@ -16,6 +16,7 @@ use Rasuvaeff\Yii3Metrics\InMemoryMeter;
 use Rasuvaeff\Yii3Metrics\InMemoryMeterProvider;
 use Rasuvaeff\Yii3Metrics\InMemoryUpDownCounter;
 use Rasuvaeff\Yii3Metrics\LabelSet;
+use Rasuvaeff\Yii3Metrics\MeterInterface;
 use Rasuvaeff\Yii3Metrics\MetricKind;
 use Rasuvaeff\Yii3Metrics\MetricSample;
 use Rasuvaeff\Yii3Metrics\MetricSnapshot;
@@ -77,6 +78,85 @@ final class InMemoryMeterTest
             Assert::fail('expected an InvalidArgumentException');
         } catch (InvalidArgumentException $e) {
             Assert::string($e->getMessage())->contains('cannot be decremented');
+        }
+    }
+
+    #[DataProvider('strictViolationProvider')]
+    public function strictMeterRejectsAtRegistration(\Closure $register, string $message): void
+    {
+        $meter = (new InMemoryMeterProvider(strictNaming: true))->getMeter();
+
+        try {
+            $register($meter);
+            Assert::fail('expected an InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains($message);
+        }
+    }
+
+    #[DataProvider('strictViolationProvider')]
+    public function lenientMeterKeepsAcceptingWhatStrictRejects(\Closure $register, string $message): void
+    {
+        $register((new InMemoryMeterProvider())->getMeter());
+        $register(new InMemoryMeter());
+
+        Assert::true(actual: true);
+    }
+
+    public static function strictViolationProvider(): iterable
+    {
+        yield 'counter without _total' => [static fn(MeterInterface $m) => $m->counter('requests'), 'must end with "_total"'];
+
+        yield 'gauge with _total' => [static fn(MeterInterface $m) => $m->gauge('tags_total'), 'kind gauge must not end'];
+
+        yield 'up-down counter with _total' => [static fn(MeterInterface $m) => $m->upDownCounter('inflight_total'), 'kind up_down_counter must not end'];
+
+        yield 'histogram with _total' => [static fn(MeterInterface $m) => $m->histogram('latency_total'), 'kind histogram must not end'];
+
+        yield 'counter re-registered with other labels' => [static function (MeterInterface $m): void {
+            $m->counter('a_total', labelNames: ['x']);
+            $m->counter('a_total', labelNames: ['y']);
+        }, 'is already registered'];
+
+        yield 'counter re-registered with other help' => [static function (MeterInterface $m): void {
+            $m->counter('a_total', 'A');
+            $m->counter('a_total', 'B');
+        }, 'is already registered'];
+
+        yield 'gauge re-registered with other labels' => [static function (MeterInterface $m): void {
+            $m->gauge('g', labelNames: ['x']);
+            $m->gauge('g', labelNames: ['y']);
+        }, 'is already registered'];
+
+        yield 'up-down counter re-registered with other labels' => [static function (MeterInterface $m): void {
+            $m->upDownCounter('u', labelNames: ['x']);
+            $m->upDownCounter('u', labelNames: ['y']);
+        }, 'is already registered'];
+
+        yield 'histogram re-registered with other buckets' => [static function (MeterInterface $m): void {
+            $m->histogram('h', labelNames: ['x'], buckets: [1.0]);
+            $m->histogram('h', labelNames: ['x'], buckets: [2.0]);
+        }, 'is already registered'];
+
+        yield 'histogram re-registered with other help' => [static function (MeterInterface $m): void {
+            $m->histogram('h', 'A');
+            $m->histogram('h', 'B');
+        }, 'is already registered'];
+    }
+
+    public function strictnessSurvivesReset(): void
+    {
+        $provider = new InMemoryMeterProvider(strictNaming: true);
+        $provider->getMeter()->counter('a_total', labelNames: ['x']);
+        $provider->reset();
+
+        $provider->getMeter()->counter('a_total', labelNames: ['y']);
+
+        try {
+            $provider->getMeter()->gauge('g_total');
+            Assert::fail('expected an InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            Assert::string($e->getMessage())->contains('reserved for counters');
         }
     }
 
@@ -392,13 +472,17 @@ final class InMemoryMeterTest
 
         // Every bucket has to be the one a value lands in at least sometimes:
         // a run whose values all fell past 5.0 would only ever check the +Inf
-        // bucket and say nothing about the cumulative counts below it.
-        // Floors are under half the share the range implies: over
-        // [-1.0, 10.0] the first bucket is ~10% of draws, the middle two
-        // ~8%, and everything past 5.0 ~45%.
-        Classify::cover($value <= 0.1, 'lands in the first bucket', 4.0);
-        Classify::cover($value > 0.1 && $value <= 1.0, 'lands mid-range', 3.0);
-        Classify::cover($value > 5.0, 'past the last finite bound', 20.0);
+        // bucket and say nothing about the cumulative counts below it. The
+        // generator draws one range per bucket, so each gets a fixed share of
+        // runs, and its edge bias lands exactly on the `le` bounds. Floors sit
+        // below the lowest share measured over 20,000 seeds of 200 runs
+        // (first 12.5%, mid-range 22%, past 5.0 7%, on a bound 6.5%). A
+        // uniform draw over [-1.0, 10.0] gave mid-range only ~6.5% and failed
+        // its 3% floor in ~0.85% of runs.
+        Classify::cover($value <= 0.1, 'lands in the first bucket', 8.0);
+        Classify::cover($value > 0.1 && $value <= 1.0, 'lands mid-range', 15.0);
+        Classify::cover($value > 5.0, 'past the last finite bound', 4.0);
+        Classify::cover(\in_array($value, [0.1, 0.5, 1.0, 5.0], strict: true), 'exactly on a bound', 3.0);
 
         $sample = $meter->snapshots()[0]->samples[0];
         Assert::same($sample->value, 1.0);
@@ -414,7 +498,13 @@ final class InMemoryMeterTest
     public static function histogramBucketsAreCumulativeGenerators(): array
     {
         return [
-            'value' => Gen::floatBetween(-1.0, 10.0),
+            'value' => Gen::frequency([
+                [1, Gen::floatBetween(-1.0, 0.1)],
+                [1, Gen::floatBetween(0.1, 0.5)],
+                [1, Gen::floatBetween(0.5, 1.0)],
+                [1, Gen::floatBetween(1.0, 5.0)],
+                [1, Gen::floatBetween(5.0, 10.0)],
+            ]),
         ];
     }
 

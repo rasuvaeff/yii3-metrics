@@ -60,6 +60,14 @@ the app (`MeterProviderInterface => NullMeterProvider`). Binding it twice is a
      hides the failure until the backend is switched on. Any new backend must
      copy both guards; a backend without them makes `NAN` behave differently
      per backend, which is the bug they were added for.
+   - **Strict naming is opt-in and identical across impls.** Suffix rules,
+     conflicting re-registration and series collisions live in
+     `Internal\RegistrationGuard` (`@api`, one per meter). `InMemoryMeter` and
+     `NullMeter` run it only when built with `strictNaming: true`;
+     `NullMeter::instance()` is a shared singleton and must stay lenient — a
+     guard there would carry registrations across tests. The default stays
+     lenient until a major: flipping it breaks applications with existing
+     `_total` gauges.
    - **Recording-impl-only checks stay out of `Null*`**: the counter's
      negative-increment rejection is a recording-impl concern — `NullCounter`
      accepts it.

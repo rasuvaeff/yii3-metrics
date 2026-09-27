@@ -14,10 +14,17 @@ final class InMemoryMeterProvider implements MeterProviderInterface
 {
     private ?InMemoryMeter $meter = null;
 
+    /**
+     * @param bool $strictNaming enforce suffix conventions and reject conflicting re-registration
+     */
+    public function __construct(
+        private readonly bool $strictNaming = false,
+    ) {}
+
     #[\Override]
     public function getMeter(?string $name = null): MeterInterface
     {
-        return $this->meter ??= new InMemoryMeter();
+        return $this->meter ??= new InMemoryMeter(strictNaming: $this->strictNaming);
     }
 
     /**
