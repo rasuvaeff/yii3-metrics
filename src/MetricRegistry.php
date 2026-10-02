@@ -39,7 +39,7 @@ final readonly class MetricRegistry
             return $this->meter->counter($name, $help, $labelNames);
         }
 
-        self::onlyTheDefinition($name->name, $help, $labelNames);
+        $this->onlyTheDefinition($name->name, $help, $labelNames);
 
         return new DefinedCounter($this->meter->counter($name->name, $name->help, $name->labelNames), $name);
     }
@@ -56,7 +56,7 @@ final readonly class MetricRegistry
             return $this->meter->gauge($name, $help, $labelNames);
         }
 
-        self::onlyTheDefinition($name->name, $help, $labelNames);
+        $this->onlyTheDefinition($name->name, $help, $labelNames);
 
         return new DefinedGauge($this->meter->gauge($name->name, $name->help, $name->labelNames), $name);
     }
@@ -73,7 +73,7 @@ final readonly class MetricRegistry
             return $this->meter->upDownCounter($name, $help, $labelNames);
         }
 
-        self::onlyTheDefinition($name->name, $help, $labelNames);
+        $this->onlyTheDefinition($name->name, $help, $labelNames);
 
         return new DefinedUpDownCounter($this->meter->upDownCounter($name->name, $name->help, $name->labelNames), $name);
     }
@@ -95,7 +95,7 @@ final readonly class MetricRegistry
             return $this->meter->histogram($name, $help, $labelNames, $buckets);
         }
 
-        self::onlyTheDefinition($name->name, $help, $labelNames, $buckets);
+        $this->onlyTheDefinition($name->name, $help, $labelNames, $buckets);
 
         return new DefinedHistogram(
             $this->meter->histogram($name->name, $name->help, $name->labelNames, $name->buckets),
@@ -110,7 +110,7 @@ final readonly class MetricRegistry
      * @param list<string> $labelNames
      * @param list<float> $buckets
      */
-    private static function onlyTheDefinition(string $metric, string $help, array $labelNames, array $buckets = []): void
+    private function onlyTheDefinition(string $metric, string $help, array $labelNames, array $buckets = []): void
     {
         if ($help !== '' || $labelNames !== [] || $buckets !== []) {
             throw new InvalidArgumentException(\sprintf(
