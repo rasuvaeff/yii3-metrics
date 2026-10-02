@@ -68,6 +68,43 @@ for counted values: each process contributes deltas, so it aggregates correctly
 across short-lived php-fpm workers, where a gauge's `inc()`/`dec()` (kept for
 single-process convenience) would restart from the process-local value.
 
+### Declare a metric once
+
+Name, help, label names and buckets can live in one definition, passed wherever
+the metric is recorded — call sites cannot drift apart:
+
+```php
+use Rasuvaeff\Yii3Metrics\CounterDefinition;
+
+final class QueueMetrics
+{
+    public static function pushed(): CounterDefinition
+    {
+        return new CounterDefinition(
+            name: 'queue_messages_pushed_total',
+            help: 'Messages pushed to queue channels',
+            labelNames: ['channel', 'message'],
+        );
+    }
+}
+
+$registry->counter(QueueMetrics::pushed())->inc(labels: ['channel' => 'creator', 'message' => 'refresh']);
+```
+
+- `CounterDefinition`, `GaugeDefinition`, `UpDownCounterDefinition` and
+  `HistogramDefinition` (with `buckets`) validate the name, the label names and
+  the bucket layout on construction.
+- Given a definition, `MetricRegistry` returns a `DefinedCounter`,
+  `DefinedGauge`, `DefinedUpDownCounter` or `DefinedHistogram`. They take labels
+  as a plain array as well as a `LabelSet`, and refuse labels whose names differ
+  from the definition's, naming the metric: `Metric "queue_messages_pushed_total"
+  takes labels [channel, message], got [channel]`.
+- A definition is the whole declaration: passing `help`, `labelNames` or
+  `buckets` beside it throws.
+- The string form is unchanged and keeps returning the meter's own instrument.
+- To have a second registration with a different definition refused, turn on
+  [strict naming](#naming--labels).
+
 ### Naming & labels
 
 - Metric names follow the **Prometheus** grammar `^[a-zA-Z_:][a-zA-Z0-9_:]*$`
@@ -218,7 +255,9 @@ $provider = new FailOpenMeterProvider($provider, $logger, cooldownSeconds: 30.0)
 
 | Type | Role |
 |---|---|
-| `MetricRegistry` | facade: `counter/gauge/upDownCounter/histogram(name, help, labelNames, buckets)` |
+| `MetricRegistry` | facade: `counter/gauge/upDownCounter/histogram(name, help, labelNames, buckets)`, or the same with a definition |
+| `CounterDefinition` / `GaugeDefinition` / `UpDownCounterDefinition` / `HistogramDefinition` | a metric declared once: name, help, label names (and buckets), validated on construction |
+| `DefinedCounter` / `DefinedGauge` / `DefinedUpDownCounter` / `DefinedHistogram` | what the registry returns for a definition: labels as an array or a `LabelSet`, names checked against the definition |
 | `MeterProviderInterface` / `MeterInterface` | swappable backend entry point; a meter creates and memoizes instruments. `getMeter($name)`'s `$name` is an instrumentation scope for diagnostics — metric state is global per `(kind, name)`, a provider MAY return the same meter for every name |
 | `CounterInterface` / `GaugeInterface` / `UpDownCounterInterface` / `HistogramInterface` | instrument contracts |
 | `LabelSet` / `MetricKind` | validated label pairs / instrument kind enum (`Counter`, `Gauge`, `UpDownCounter`, `Histogram`) |

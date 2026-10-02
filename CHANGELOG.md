@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2.4.0 — 2026-10-02
+
+- **Added:** metric definitions — `CounterDefinition`, `GaugeDefinition`,
+  `UpDownCounterDefinition`, `HistogramDefinition` — declare name, help, label
+  names and buckets once (#38). `MetricRegistry` accepts a definition in place
+  of the name and returns a `Defined*` instrument that takes labels as a plain
+  array or a `LabelSet` and refuses label names that differ from the
+  definition's, naming the metric. The string-based API is unchanged.
+- **Added:** `Internal\Validation::labelNames()` — label-name grammar and
+  uniqueness, shared by the definitions.
+- **Dev:** `rasuvaeff/understudy` and `rasuvaeff/understudy-testo` moved to `^1.0`.
+
 ## 2.3.0 — 2026-09-25
 
 - Add opt-in strict naming: `strictNaming: true` on `InMemoryMeterProvider`,

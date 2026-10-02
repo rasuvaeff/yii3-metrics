@@ -85,6 +85,24 @@ Signatures: `counter(name, help='', labelNames=[]): CounterInterface`;
 `UpDownCounterInterface::add(float $delta, LabelSet)`.
 `HistogramInterface::observe(float, LabelSet)`.
 
+Definitions (declare once, pass everywhere):
+
+```php
+use Rasuvaeff\Yii3Metrics\{CounterDefinition, HistogramDefinition};
+
+$pushed = new CounterDefinition(name: 'queue_pushed_total', help: 'Pushed', labelNames: ['channel']);
+$registry->counter($pushed)->inc(labels: ['channel' => 'web']);       // DefinedCounter
+$registry->histogram(new HistogramDefinition('db_seconds', 'help', ['op'], [0.01, 0.1]))
+    ->observe(0.02, ['op' => 'select']);                                // DefinedHistogram
+```
+
+- `CounterDefinition`/`GaugeDefinition`/`UpDownCounterDefinition`/`HistogramDefinition(+buckets)`:
+  readonly, validated on construction (metric name, label names unique + grammar, buckets).
+- Registry with a definition returns `DefinedCounter`/`DefinedGauge`/`DefinedUpDownCounter`/
+  `DefinedHistogram`: labels as `array<string, scalar>` OR `LabelSet`; label NAMES must equal
+  the definition's, else `InvalidArgumentException('Metric "x" takes labels [a, b], got [a]')`.
+- Passing help/labelNames/buckets beside a definition throws. The string form is unchanged.
+
 ### Providers
 
 ```php
