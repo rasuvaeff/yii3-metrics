@@ -54,12 +54,22 @@ final class MetricDefinitionTest
      */
     public static function invalidDefinitions(): iterable
     {
-        yield 'counter name' => [static fn(): object => new CounterDefinition('bad-name'), 'Invalid metric name "bad-name"'];
-        yield 'gauge label name' => [static fn(): object => new GaugeDefinition('g', labelNames: ['1st']), 'Invalid label name "1st"'];
-        yield 'up-down counter duplicate label' => [
-            static fn(): object => new UpDownCounterDefinition('u', labelNames: ['a', 'a']),
-            'Duplicate label name in [a, a]',
+        $classes = [
+            'counter' => CounterDefinition::class,
+            'gauge' => GaugeDefinition::class,
+            'up-down counter' => UpDownCounterDefinition::class,
+            'histogram' => HistogramDefinition::class,
         ];
+
+        foreach ($classes as $kind => $class) {
+            yield $kind . ' name' => [static fn(): object => new $class('bad-name'), 'Invalid metric name "bad-name"'];
+            yield $kind . ' label name' => [static fn(): object => new $class('m', labelNames: ['1st']), 'Invalid label name "1st"'];
+            yield $kind . ' duplicate label' => [
+                static fn(): object => new $class('m', labelNames: ['a', 'a']),
+                'Duplicate label name in [a, a]',
+            ];
+        }
+
         yield 'histogram buckets' => [
             static fn(): object => new HistogramDefinition('h', buckets: [1.0, 0.5]),
             'Histogram bounds must be strictly increasing',

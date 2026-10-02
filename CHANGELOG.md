@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 2.4.0 — 2026-10-02
 
 - **Added:** metric definitions — `CounterDefinition`, `GaugeDefinition`,
   `UpDownCounterDefinition`, `HistogramDefinition` — declare name, help, label
@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   definition's, naming the metric. The string-based API is unchanged.
 - **Added:** `Internal\Validation::labelNames()` — label-name grammar and
   uniqueness, shared by the definitions.
+- **Dev:** `rasuvaeff/understudy` and `rasuvaeff/understudy-testo` moved to `^1.0`.
 
 ## 2.3.0 — 2026-09-25
 
