@@ -69,6 +69,43 @@ $latency->observe(0.023, new LabelSet(['op' => 'select']));
 `inc()`/`dec()` gauge'а (оставлены для удобства single-process) перезапускались бы
 от process-local значения.
 
+### Метрика объявляется один раз
+
+Имя, help, имена лейблов и бакеты можно держать в одном определении и
+передавать его везде, где метрика пишется, — места вызова не разъедутся:
+
+```php
+use Rasuvaeff\Yii3Metrics\CounterDefinition;
+
+final class QueueMetrics
+{
+    public static function pushed(): CounterDefinition
+    {
+        return new CounterDefinition(
+            name: 'queue_messages_pushed_total',
+            help: 'Messages pushed to queue channels',
+            labelNames: ['channel', 'message'],
+        );
+    }
+}
+
+$registry->counter(QueueMetrics::pushed())->inc(labels: ['channel' => 'creator', 'message' => 'refresh']);
+```
+
+- `CounterDefinition`, `GaugeDefinition`, `UpDownCounterDefinition` и
+  `HistogramDefinition` (с `buckets`) проверяют имя, имена лейблов и раскладку
+  бакетов при создании.
+- Получив определение, `MetricRegistry` возвращает `DefinedCounter`,
+  `DefinedGauge`, `DefinedUpDownCounter` или `DefinedHistogram`. Они принимают
+  лейблы и обычным массивом, и `LabelSet`, а лейблы с именами, отличными от
+  объявленных, отвергают с именем метрики: `Metric "queue_messages_pushed_total"
+  takes labels [channel, message], got [channel]`.
+- Определение — это всё объявление: `help`, `labelNames` или `buckets` рядом с
+  ним — исключение.
+- Строковая форма не изменилась и по-прежнему возвращает инструмент самого meter.
+- Чтобы повторная регистрация с другим определением отвергалась, включите
+  [strict naming](#именование-и-лейблы).
+
 ### Именование и лейблы
 
 - Имена метрик следуют грамматике **Prometheus** `^[a-zA-Z_:][a-zA-Z0-9_:]*$`
@@ -223,7 +260,9 @@ $provider = new FailOpenMeterProvider($provider, $logger, cooldownSeconds: 30.0)
 
 | Тип | Роль |
 |---|---|
-| `MetricRegistry` | фасад: `counter/gauge/upDownCounter/histogram(name, help, labelNames, buckets)` |
+| `MetricRegistry` | фасад: `counter/gauge/upDownCounter/histogram(name, help, labelNames, buckets)` или то же с определением |
+| `CounterDefinition` / `GaugeDefinition` / `UpDownCounterDefinition` / `HistogramDefinition` | метрика, объявленная один раз: имя, help, имена лейблов (и бакеты), проверяются при создании |
+| `DefinedCounter` / `DefinedGauge` / `DefinedUpDownCounter` / `DefinedHistogram` | что реестр возвращает для определения: лейблы массивом или `LabelSet`, имена сверяются с определением |
 | `MeterProviderInterface` / `MeterInterface` | точка входа сменного backend'а; meter создаёт и мемоизирует инструменты. `$name` в `getMeter($name)` — instrumentation scope для диагностики: стейт метрик глобален по `(kind, name)`, провайдер МОЖЕТ возвращать один и тот же meter для любого имени |
 | `CounterInterface` / `GaugeInterface` / `UpDownCounterInterface` / `HistogramInterface` | контракты инструментов |
 | `LabelSet` / `MetricKind` | валидируемые пары лейблов / enum вида инструмента (`Counter`, `Gauge`, `UpDownCounter`, `Histogram`) |

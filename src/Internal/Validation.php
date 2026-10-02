@@ -23,12 +23,34 @@ final class Validation
     /** Prometheus metric-name grammar (allows `:`, no dots). */
     private const string NAME_PATTERN = '/^[a-zA-Z_:][a-zA-Z0-9_:]*\z/';
 
+    /** Prometheus label-name grammar, the same {@see \Rasuvaeff\Yii3Metrics\LabelSet} applies. */
+    private const string LABEL_NAME_PATTERN = '/^[a-zA-Z_]\w*\z/';
+
     private function __construct() {}
 
     public static function metricName(string $name): void
     {
         if (preg_match(self::NAME_PATTERN, $name) !== 1) {
             throw new InvalidArgumentException(\sprintf('Invalid metric name "%s"', $name));
+        }
+    }
+
+    /**
+     * Label names follow the Prometheus label-name grammar and are declared
+     * once each.
+     *
+     * @param list<string> $labelNames
+     */
+    public static function labelNames(array $labelNames): void
+    {
+        foreach ($labelNames as $labelName) {
+            if (preg_match(self::LABEL_NAME_PATTERN, $labelName) !== 1) {
+                throw new InvalidArgumentException(\sprintf('Invalid label name "%s"', $labelName));
+            }
+        }
+
+        if (\count(array_unique($labelNames)) !== \count($labelNames)) {
+            throw new InvalidArgumentException(\sprintf('Duplicate label name in [%s]', implode(', ', $labelNames)));
         }
     }
 
