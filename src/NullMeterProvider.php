@@ -18,8 +18,9 @@ final readonly class NullMeterProvider implements MeterProviderInterface
     /**
      * @param bool $strictNaming enforce suffix conventions and reject conflicting re-registration
      */
-    public function __construct(bool $strictNaming = false)
-    {
+    public function __construct(
+        bool $strictNaming = false,
+    ) {
         $this->meter = $strictNaming ? new NullMeter(strictNaming: true) : NullMeter::instance();
     }
 

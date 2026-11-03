@@ -321,6 +321,38 @@ final class InMemoryMeterTest
         Assert::same($sample->sum, 0.25);
     }
 
+    public function providerValueOfAnAbsentSampleIsNullWithoutAWarning(): void
+    {
+        $provider = new InMemoryMeterProvider();
+        $provider->getMeter()->counter('jobs_total', labelNames: ['queue'])->inc(1.0, new LabelSet(['queue' => 'fast']));
+
+        set_error_handler(static function (int $severity, string $message): never {
+            throw new \ErrorException($message, 0, $severity);
+        });
+
+        try {
+            $absentMetric = $provider->value('missing_total');
+            $absentLabels = $provider->value('jobs_total', ['queue' => 'slow']);
+        } finally {
+            restore_error_handler();
+        }
+
+        Assert::null($absentMetric);
+        Assert::null($absentLabels);
+    }
+
+    public function providerValuesPicksTheRequestedMetricAmongSeveral(): void
+    {
+        $provider = new InMemoryMeterProvider();
+        $meter = $provider->getMeter();
+        $meter->counter('a_total')->inc(1.0);
+        $meter->counter('z_total')->inc(2.0);
+
+        Assert::same($provider->values('a_total'), [(new LabelSet())->key() => 1.0]);
+        Assert::same($provider->values('z_total'), [(new LabelSet())->key() => 2.0]);
+        Assert::same($provider->values('m_total'), []);
+    }
+
     public function providerResetDropsAllRecordedState(): void
     {
         $provider = new InMemoryMeterProvider();

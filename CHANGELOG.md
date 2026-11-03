@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+- Mutation testing now counts code that tests execute but do not name in `#[Covers]` (`infection --with-uncovered`); overall MSI 91% to 98% against minMsi 96. Added tests: fail-open instruments write through to the wrapped provider, `InMemoryMeterProvider::value()` of an absent sample is `null` without a warning, and `values()` picks the requested metric among several. The `inc()`/`dec()` signatures of the counters and gauges and the `strictNaming` constructors now list their parameters on their own lines (no behaviour change).
+
 ## 2.4.0 — 2026-10-02
 
 - **Added:** metric definitions — `CounterDefinition`, `GaugeDefinition`,

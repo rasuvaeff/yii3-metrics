@@ -38,14 +38,18 @@ final class InMemoryGauge implements GaugeInterface
     }
 
     #[\Override]
-    public function inc(float $amount = 1.0, LabelSet $labels = new LabelSet()): void
-    {
+    public function inc(
+        float $amount = 1.0,
+        LabelSet $labels = new LabelSet(),
+    ): void {
         $this->adjust($amount, $labels);
     }
 
     #[\Override]
-    public function dec(float $amount = 1.0, LabelSet $labels = new LabelSet()): void
-    {
+    public function dec(
+        float $amount = 1.0,
+        LabelSet $labels = new LabelSet(),
+    ): void {
         $this->adjust(-$amount, $labels);
     }
 
