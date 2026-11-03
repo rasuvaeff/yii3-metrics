@@ -16,8 +16,10 @@ final readonly class FailOpenCounter implements CounterInterface
     ) {}
 
     #[\Override]
-    public function inc(float $amount = 1.0, LabelSet $labels = new LabelSet()): void
-    {
+    public function inc(
+        float $amount = 1.0,
+        LabelSet $labels = new LabelSet(),
+    ): void {
         $this->provider->run($this->name, fn(): mixed => $this->inner->inc($amount, $labels));
     }
 }

@@ -23,8 +23,9 @@ final class NullMeter implements MeterInterface
 
     private readonly ?RegistrationGuard $guard;
 
-    public function __construct(bool $strictNaming = false)
-    {
+    public function __construct(
+        bool $strictNaming = false,
+    ) {
         $this->guard = $strictNaming ? new RegistrationGuard() : null;
     }
 

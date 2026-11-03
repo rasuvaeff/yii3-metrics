@@ -22,14 +22,18 @@ final readonly class FailOpenGauge implements GaugeInterface
     }
 
     #[\Override]
-    public function inc(float $amount = 1.0, LabelSet $labels = new LabelSet()): void
-    {
+    public function inc(
+        float $amount = 1.0,
+        LabelSet $labels = new LabelSet(),
+    ): void {
         $this->provider->run($this->name, fn(): mixed => $this->inner->inc($amount, $labels));
     }
 
     #[\Override]
-    public function dec(float $amount = 1.0, LabelSet $labels = new LabelSet()): void
-    {
+    public function dec(
+        float $amount = 1.0,
+        LabelSet $labels = new LabelSet(),
+    ): void {
         $this->provider->run($this->name, fn(): mixed => $this->inner->dec($amount, $labels));
     }
 }

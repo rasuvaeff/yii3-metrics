@@ -8,58 +8,55 @@
         "summary": "build/infection-summary.log"
     },
     "testFramework": "testo",
-    // ER-003 attribution sweep. src/Exception/InvalidArgumentException.php was
-    // named in zero test's #[Covers(...)], so it was silently excluded from
-    // mutation attribution regardless of the tests that already throw/catch it
-    // (ValidationTest, LabelSetTest, InMemoryMeterTest, NullMeterTest). Fixed by
-    // adding #[Covers(InvalidArgumentException::class)] to those four test
-    // classes — attribution-only, not a mutant-count fix: confirmed empirically
-    // (`infection --filter=InvalidArgumentException.php`, both before and after
-    // the #[Covers] change) that 0 mutations are generated either way. The class
-    // body is `final class InvalidArgumentException extends \InvalidArgumentException {}`,
-    // a bare marker with no statements to mutate.
-    //
-    // While in here, also closed 11 pre-existing escapes surfaced by the same
-    // full run (Escaped 16 -> 5, Total 150 -> 150, Covered MSI 89% -> 96%) with
-    // targeted assertions: InMemoryMeter name-validation on all four factories,
-    // gauge/histogram memoization identity, InMemoryGauge's fresh-key baseline
-    // (`?? 0.0`), NullMeter gauge/histogram name-validation, NullUpDownCounter
-    // singleton identity, and MetricSnapshot::equals() detecting a mismatch past
-    // the first sorted sample. The remaining 5 are genuine equivalents, named
-    // individually — not tests, not ignores:
-    //   - InMemoryHistogram.php:37 ArrayItemRemoval (`'count' => 0.0,` dropped
+    // Overall MSI (--with-uncovered) is 98% (343/350 counted, Not Covered: 0,
+    // Ignored: 18). The 7 survivors are genuine equivalents, named individually
+    // (not tests, not ignores):
+    //   - InMemoryHistogram.php:43 ArrayItemRemoval (`'count' => 0.0,` dropped
     //     from the initial array literal). `$this->data[$key]['count'] += 1.0`
     //     always runs on every observe() regardless, so a missing key
     //     auto-vivifies from null to the same 1.0 as an explicit 0.0 baseline
-    //     would — PHP's `null + 1.0 === 0.0 + 1.0`. No observable output differs.
-    //   - InMemoryHistogram.php:40 DecrementInteger (`array_fill(0, n, 0.0)` ->
-    //     `array_fill(-1, n, 0.0)`). This only relabels the internal bucket
-    //     array's keys (shifts one extra, unused `-1` key in; drops the last
-    //     real index, `n-1`, which maps to the `+Inf` bound). `snapshot()`
-    //     re-reads buckets strictly through `$this->bounds`' own 0..n-1 index
-    //     sequence, so the stray `-1` key is never read. The dropped `n-1` key
-    //     (`+Inf`) always auto-vivifies to the correct count because every
-    //     observation satisfies `value <= INF`, i.e. that bucket is touched on
-    //     every single call — same reasoning as the mutant above. No bucket
-    //     value a test can observe ever differs.
-    //   - LabelSet.php:36 MatchArmRemoval (`\is_string($value) => $value,` arm
-    //     dropped from the label-value match, falling through to
-    //     `default => (string) $value`). For a string input, `(string) $value`
-    //     is the identity cast — same output either way.
-    //   - MetricSnapshot.php:55 Spaceship (`$a <=> $b` reversed to `$b <=> $a`
-    //     in the private `sortedSamples()` comparator). It is used only inside
-    //     `equals()`, symmetrically, on both operands' own sample lists. Any
-    //     consistent total order — ascending or descending — puts the same-key
-    //     samples from `$this` and `$other` at matching indices, so the
-    //     positional comparison in `equals()` is unaffected by the direction.
-    //   - RedMetricsMiddleware.php:73 CastString (`(string) $response->getStatusCode()`
-    //     -> the cast dropped, `$status` stays `int`). `$status` is only ever
-    //     consumed as `LabelSet`'s `'status'` value, and `LabelSet`'s
-    //     constructor already stringifies any non-bool/non-string scalar via its
-    //     own `default => (string) $value` match arm — the explicit cast here is
-    //     redundant with that downstream coercion, not a behavioral difference.
+    //     would: PHP's `null + 1.0 === 0.0 + 1.0`.
+    //   - InMemoryHistogram.php:46 DecrementInteger (`array_fill(0, n, 0.0)` ->
+    //     `array_fill(-1, n, 0.0)`). This only relabels the internal bucket keys;
+    //     `snapshot()` re-reads buckets strictly through `$this->bounds`' own
+    //     0..n-1 sequence, and the dropped `n-1` key (`+Inf`) auto-vivifies to the
+    //     correct count because every observation satisfies `value <= INF`.
+    //   - LabelSet.php:36 MatchArmRemoval (`\is_string($value) => $value,` dropped,
+    //     falling through to `default => (string) $value`): identity cast.
+    //   - MetricSnapshot.php:55 Spaceship (`$a <=> $b` reversed in the private
+    //     `sortedSamples()` comparator). Used only inside `equals()`, on both
+    //     operands' own sample lists; any consistent total order matches the same
+    //     samples at the same indices.
+    //   - RedMetricsMiddleware.php:75 and :107 CastFloat (`(float) hrtime(as_number: true)`
+    //     -> the cast dropped). `hrtime(true)` returns an int; subtracting two ints
+    //     and dividing by `1e9` yields the same float.
+    //   - FailOpenMeterProvider.php:39 LessThan (`$now < $this->retryAt` -> `<=`):
+    //     the two differ only when `microtime(true)` equals `retryAt` exactly, which
+    //     a wall-clock read cannot be made to do.
     "minMsi": 96,
     "mutators": {
-        "@default": true
+        "@default": true,
+        // Constructor/method parameter declarations with a default value
+        // (`private int $x = 100,`, `bool $strict = false,`): the mutant sits on a
+        // signature line with no executable opcode under pcov, so it is reported Not
+        // Covered whatever the tests do. Only a type-prefixed `$name = default,` line
+        // matches; a body line cannot (no type before the variable). Do NOT add ^ or $:
+        // Infection wraps the pattern as ^-\s*REGEX$ over the removed diff line.
+        // Verified 2026-11-01 by diffing the survivor lists with and without it:
+        // bulkhead 6, circuit-breaker 13, json-ld 19 mutants removed, all of them
+        // such signature lines; Escaped and Timed Out unchanged.
+        "global-ignoreSourceCodeByRegex": [
+            "(?:(?:private|protected|public|readonly)\\s+)*\\??[A-Za-z_\\\\][\\w\\\\|]*\\s+\\$\\w+\\s*=\\s*[^,;]+,"
+        ],
+        // Off: with --with-uncovered a PublicVisibility mutant sits on a parameterless
+        // method's signature line, which has no executable opcode under pcov/xdebug,
+        // so it is reported Not Covered and can never be killed, whatever #[Covers]
+        // says. Measured on pinned-http-client 2026-11-01: 4 of 4 such mutants were
+        // Not Covered, none killed.
+        "PublicVisibility": false,
+        // Off for the same reason: a ProtectedVisibility mutant on a protected method's
+        // signature line is Not Covered and cannot be killed. Measured on
+        // understudy-phpunit 2026-11-01: 4 of 4 such mutants were Not Covered.
+        "ProtectedVisibility": false
     }
 }
