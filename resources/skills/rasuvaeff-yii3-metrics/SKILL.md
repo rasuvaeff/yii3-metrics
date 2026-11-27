@@ -17,8 +17,8 @@ Namespace `Rasuvaeff\Yii3Metrics`.
 
 ## Safety rules — verify these on every change
 
-1. **Metric names are Prometheus-strict** — `^[a-zA-Z_:][a-zA-Z0-9_:]*$`,
-   underscores, NO dots. Label names `^[a-zA-Z_]\w*$`. Validation runs even in
+1. **Metric names are Prometheus-strict** — `/^[a-zA-Z_:][a-zA-Z0-9_:]*\z/`,
+   underscores, NO dots. Label names `/^[a-zA-Z_]\w*\z/`. Validation runs even in
    `NullMeter`; a bad name throws `Exception\InvalidArgumentException`.
 
    ```php
